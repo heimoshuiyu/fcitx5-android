@@ -31,6 +31,8 @@ import org.fcitx.fcitx5.android.ui.main.settings.behavior.ClipboardSettingsFragm
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.KeyboardSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.SymbolSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.VoiceInputSettingsFragment
+import org.fcitx.fcitx5.android.ui.main.settings.behavior.TranscriptionHistoryFragment
+import org.fcitx.fcitx5.android.ui.main.settings.behavior.TranscriptionDetailFragment
 import org.fcitx.fcitx5.android.ui.main.settings.global.GlobalConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodListFragment
@@ -83,6 +85,12 @@ sealed class SettingsRoute : Parcelable {
 
     @Serializable
     data object VoiceInput : SettingsRoute()
+
+    @Serializable
+    data object TranscriptionHistory : SettingsRoute()
+
+    @Serializable
+    data class TranscriptionDetail(val recordId: Long) : SettingsRoute()
 
     @Serializable
     data object Plugin : SettingsRoute()
@@ -225,6 +233,12 @@ sealed class SettingsRoute : Parcelable {
             }
             fragment<VoiceInputSettingsFragment, VoiceInput> {
                 label = ctx.getString(R.string.voice_input)
+            }
+            fragment<TranscriptionHistoryFragment, TranscriptionHistory> {
+                label = ctx.getString(R.string.voice_input_history)
+            }
+            fragment<TranscriptionDetailFragment, TranscriptionDetail> {
+                label = ctx.getString(R.string.transcription_detail_title)
             }
             fragment<PluginFragment, Plugin> {
                 label = ctx.getString(R.string.plugins)

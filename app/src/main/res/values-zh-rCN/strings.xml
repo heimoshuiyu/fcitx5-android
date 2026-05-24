@@ -360,4 +360,10 @@
     <string name="voice_input_auto_hotwords_summary">编辑转写文本时，自动将修正的词添加为热词。</string>
     <string name="voice_input_auto_hotwords_list">已学习的热词</string>
     <string name="voice_input_auto_hotwords_list_summary">根据您的修正自动学习的热词。</string>
+    <string name="voice_input_history">转录历史</string>
+    <string name="voice_input_history_summary">查看历史转录记录，包括提示词、结果和原始 API 响应。</string>
+    <string name="transcription_history_empty">暂无转录记录</string>
+    <string name="transcription_history_clear_title">清空历史</string>
+    <string name="transcription_history_clear_message">确定删除所有转录记录吗？</string>
+    <string name="transcription_detail_title">转录详情</string>
 </resources>

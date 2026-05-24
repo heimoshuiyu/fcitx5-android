@@ -50,7 +50,7 @@ class OpenCodeBackend(
         mime: String,
         prompt: String?,
         selectedText: String?
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runCatching {
             val serverUrl = getServerUrl()
                 ?: throw TranscriptionException("Server URL not configured")
@@ -133,7 +133,7 @@ class OpenCodeBackend(
             Timber.d("[$name] Response body: $responseBody")
 
             val result = json.decodeFromString<TranscribeResponse>(responseBody)
-            result.text
+            TranscriptionResult(text = result.text, rawResponseBody = responseBody)
         }
     }
 

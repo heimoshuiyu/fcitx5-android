@@ -6,12 +6,15 @@ package org.fcitx.fcitx5.android.input.voice
 
 import android.text.InputType
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.data.clipboard.ClipboardManager
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import org.fcitx.fcitx5.android.data.voice.TranscriptionHistoryManager
+import org.fcitx.fcitx5.android.data.voice.db.TranscriptionRecord
 import org.fcitx.fcitx5.android.input.FcitxInputMethodService
 import timber.log.Timber
 
@@ -158,6 +161,11 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
 
     private suspend fun transcribeAudio(audioBytes: ByteArray) {
         _state.value = State.TRANSCRIBING
+        val startTime = System.currentTimeMillis()
+        val audioSize = audioBytes.size.toLong()
+        // Rough estimate: WAV at 16kHz 16-bit mono ≈ 32KB/sec, subtract 44-byte header
+        val audioDurationSec = ((audioSize - 44).toFloat() / 32000f).coerceAtLeast(0f)
+
         try {
             val backend = createBackend()
             val ic = service.currentInputConnection
@@ -173,8 +181,25 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
             Timber.d("editMode: backend=${backend.name}, selectedText=${if (selectedText != null) "${selectedText.length} chars" else "null"}")
             val prompt = buildPrompt(selectedText != null)
             val result = backend.transcribe(audioBytes, "audio/wav", prompt, selectedText)
+            val durationMs = System.currentTimeMillis() - startTime
 
-            result.onSuccess { text ->
+            result.onSuccess { transcriptionResult ->
+                val text = transcriptionResult.text
+                // Save successful transcription record
+                saveRecord(
+                    backendType = backend.name,
+                    prompt = prompt ?: "",
+                    editMode = selectedText != null,
+                    selectedText = selectedText ?: "",
+                    resultText = text,
+                    success = true,
+                    errorMessage = "",
+                    durationMs = durationMs,
+                    rawResponseBody = transcriptionResult.rawResponseBody,
+                    audioDurationSec = audioDurationSec,
+                    audioSizeBytes = audioSize,
+                )
+
                 if (text.isNotBlank()) {
                     // Record transcription position for auto hotword detection
                     val cursorPos = service.currentInputSelection.start
@@ -196,16 +221,79 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                 }
             }.onFailure { error ->
                 Timber.e(error, "Transcription failed (${backend.name})")
+                // Save failed transcription record
+                saveRecord(
+                    backendType = backend.name,
+                    prompt = prompt ?: "",
+                    editMode = selectedText != null,
+                    selectedText = selectedText ?: "",
+                    resultText = "",
+                    success = false,
+                    errorMessage = error.message ?: "Transcription failed",
+                    durationMs = durationMs,
+                    rawResponseBody = "",
+                    audioDurationSec = audioDurationSec,
+                    audioSizeBytes = audioSize,
+                )
                 // Cache for retry
                 cachedAudio = audioBytes
                 _state.value = State.RETRY_AVAILABLE
                 listener?.onError(error.message ?: "Transcription failed")
             }
         } catch (e: Exception) {
+            val durationMs = System.currentTimeMillis() - startTime
             Timber.e(e, "Transcription error")
+            saveRecord(
+                backendType = prefs.backendType.getValue().name,
+                prompt = "",
+                editMode = false,
+                selectedText = "",
+                resultText = "",
+                success = false,
+                errorMessage = e.message ?: "Transcription error",
+                durationMs = durationMs,
+                rawResponseBody = "",
+                audioDurationSec = audioDurationSec,
+                audioSizeBytes = audioSize,
+            )
             cachedAudio = audioBytes
             _state.value = State.RETRY_AVAILABLE
             listener?.onError(e.message ?: "Transcription error")
+        }
+    }
+
+    private fun saveRecord(
+        backendType: String,
+        prompt: String,
+        editMode: Boolean,
+        selectedText: String,
+        resultText: String,
+        success: Boolean,
+        errorMessage: String,
+        durationMs: Long,
+        rawResponseBody: String,
+        audioDurationSec: Float,
+        audioSizeBytes: Long,
+    ) {
+        try {
+            val record = TranscriptionRecord(
+                backendType = backendType,
+                prompt = prompt,
+                editMode = editMode,
+                selectedText = selectedText,
+                resultText = resultText,
+                success = success,
+                errorMessage = errorMessage,
+                durationMs = durationMs,
+                rawResponseBody = rawResponseBody,
+                audioDurationSec = audioDurationSec,
+                audioSizeBytes = audioSizeBytes,
+            )
+            service.lifecycleScope.launch(Dispatchers.IO) {
+                TranscriptionHistoryManager.insert(record)
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to save transcription record")
         }
     }
 
@@ -254,11 +342,13 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         } else emptyList()
         val allHotwords = (manualHotwords + autoHotwords).distinct()
         if (allHotwords.isNotEmpty()) {
-            parts.add("Hotwords: ${allHotwords.joinToString(" ")}")
+            parts.add("<hotwords>${allHotwords.joinToString(" ")}</hotwords>")
         }
 
         val fieldType = describeInputFieldType()
-        if (fieldType != null) parts.add("Input field type: $fieldType")
+        if (fieldType != null) {
+            parts.add("<input_field_type>$fieldType</input_field_type>")
+        }
 
         val before = ic.getTextBeforeCursor(1000, 0)?.toString()?.trim()
         val selected = if (editMode) null else ic.getSelectedText(0)?.toString()?.trim()
@@ -266,20 +356,22 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         val surrounding = listOfNotNull(before, selected, after)
             .filter { it.isNotEmpty() }
             .joinToString("")
-        if (surrounding.isNotEmpty()) parts.add("Surrounding text:\n$surrounding")
+        if (surrounding.isNotEmpty()) {
+            parts.add("<surrounding_text>\n$surrounding\n</surrounding_text>")
+        }
 
         // Add screen context from accessibility service (if enabled)
         val screenText = ScreenTextProvider.screenText
         Timber.d("ScreenTextProvider: enabled=${ScreenTextProvider.isEnabled}, textLen=${screenText.length}, isNotBlank=${screenText.isNotBlank()}, surroundingLen=${surrounding.length}")
         if (screenText.isNotBlank() && screenText != surrounding) {
             Timber.d("ScreenText added to prompt")
-            parts.add("Visible screen text:\n$screenText")
+            parts.add("<visible_screen_text>\n$screenText\n</visible_screen_text>")
         }
 
         // Add clipboard content as context
         val clipboardText = ClipboardManager.lastEntry?.text?.trim()
         if (!clipboardText.isNullOrEmpty()) {
-            parts.add("Clipboard content:\n${clipboardText.take(1000)}")
+            parts.add("<clipboard_content>\n${clipboardText.take(1000)}\n</clipboard_content>")
         }
 
         val result = if (parts.isNotEmpty()) parts.joinToString("\n") else null

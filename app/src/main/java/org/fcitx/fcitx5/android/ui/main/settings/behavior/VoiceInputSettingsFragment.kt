@@ -8,18 +8,37 @@ package org.fcitx.fcitx5.android.ui.main.settings.behavior
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceScreen
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceFragment
 import org.fcitx.fcitx5.android.input.voice.ScreenTextAccessibilityService
 import org.fcitx.fcitx5.android.input.voice.ScreenTextProvider
+import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
+import org.fcitx.fcitx5.android.utils.navigateWithAnim
 
 class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance().voiceInput) {
 
     override fun onPreferenceUiCreated(screen: PreferenceScreen) {
         val context = screen.context
+
+        // Transcription History entry point — add at top (order = -1)
+        val historyPref = Preference(context).apply {
+            key = "voice_input_history"
+            isPersistent = false
+            isSelectable = true
+            title = context.getString(R.string.voice_input_history)
+            summary = context.getString(R.string.voice_input_history_summary)
+            order = -1
+            setOnPreferenceClickListener {
+                findNavController().navigateWithAnim(SettingsRoute.TranscriptionHistory)
+                true
+            }
+        }
+        screen.addPreference(historyPref)
 
         val category = PreferenceCategory(context).apply {
             title = "Screen text context"

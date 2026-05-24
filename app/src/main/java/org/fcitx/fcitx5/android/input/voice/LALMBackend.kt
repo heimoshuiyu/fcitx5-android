@@ -55,7 +55,7 @@ class LALMBackend(
         mime: String,
         prompt: String?,
         selectedText: String?
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runCatching {
             val url = getUrl()
                 ?: throw TranscriptionException("LALM API URL not configured")
@@ -155,7 +155,8 @@ class LALMBackend(
             Timber.d("[$name] Response body: $responseBody")
 
             val result = json.decodeFromString<ChatCompletionResponse>(responseBody)
-            result.choices?.firstOrNull()?.message?.content ?: ""
+            val text = result.choices?.firstOrNull()?.message?.content ?: ""
+            TranscriptionResult(text = text, rawResponseBody = responseBody)
         }
     }
 

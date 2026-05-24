@@ -5,6 +5,17 @@
 package org.fcitx.fcitx5.android.input.voice
 
 /**
+ * Result of a voice transcription call.
+ *
+ * @param text the transcribed text
+ * @param rawResponseBody the raw JSON response body from the backend API
+ */
+data class TranscriptionResult(
+    val text: String,
+    val rawResponseBody: String,
+)
+
+/**
  * Common interface for voice transcription backends.
  */
 interface VoiceBackend {
@@ -17,14 +28,14 @@ interface VoiceBackend {
      * @param prompt optional context prompt for the transcription
      * @param selectedText if non-null, the backend should treat the voice as
      *   an instruction to edit this text (instead of transcribing to new text)
-     * @return Result with the transcribed text on success
+     * @return Result with [TranscriptionResult] on success
      */
     suspend fun transcribe(
         audioBytes: ByteArray,
         mime: String,
         prompt: String?,
         selectedText: String? = null
-    ): Result<String>
+    ): Result<TranscriptionResult>
 
     /** Human-readable name for error messages */
     val name: String

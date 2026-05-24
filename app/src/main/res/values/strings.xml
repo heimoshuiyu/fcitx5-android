@@ -361,4 +361,10 @@
     <string name="voice_input_auto_hotwords_summary">Automatically add corrected words as hotwords when you edit transcribed text.</string>
     <string name="voice_input_auto_hotwords_list">Auto-learned hotwords</string>
     <string name="voice_input_auto_hotwords_list_summary">Words automatically learned from your corrections.</string>
+    <string name="voice_input_history">Transcription History</string>
+    <string name="voice_input_history_summary">View past transcription records with prompts, results, and raw API responses.</string>
+    <string name="transcription_history_empty">No transcription records yet</string>
+    <string name="transcription_history_clear_title">Clear history</string>
+    <string name="transcription_history_clear_message">Delete all transcription records?</string>
+    <string name="transcription_detail_title">Transcription Detail</string>
 </resources>

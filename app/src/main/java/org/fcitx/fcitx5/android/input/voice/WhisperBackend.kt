@@ -44,7 +44,7 @@ class WhisperBackend(
         mime: String,
         prompt: String?,
         selectedText: String?
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runCatching {
             val url = getUrl()
                 ?: throw TranscriptionException("Whisper API URL not configured")
@@ -89,7 +89,10 @@ class WhisperBackend(
             Timber.d("[$name] Response body: $responseBody")
 
             val result = json.decodeFromString<WhisperResponse>(responseBody)
-            result.text ?: ""
+            TranscriptionResult(
+                text = result.text ?: "",
+                rawResponseBody = responseBody,
+            )
         }
     }
 }
