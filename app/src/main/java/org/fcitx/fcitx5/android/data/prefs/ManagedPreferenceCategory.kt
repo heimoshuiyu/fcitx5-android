@@ -83,10 +83,11 @@ abstract class ManagedPreferenceCategory(
         title: Int,
         key: String,
         defaultValue: String,
-        enableUiOn: (() -> Boolean)? = null
+        enableUiOn: (() -> Boolean)? = null,
+        multiline: Boolean = false
     ): ManagedPreference.PString {
         val pref = ManagedPreference.PString(sharedPreferences, key, defaultValue)
-        val ui = ManagedPreferenceUi.EditText(title, key, defaultValue, enableUiOn)
+        val ui = ManagedPreferenceUi.EditText(title, key, defaultValue, enableUiOn, multiline)
         pref.register()
         ui.registerUi()
         return pref

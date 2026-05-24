@@ -374,6 +374,28 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             VoiceBackendType.OpenCode
         )
 
+        // Hotwords (shared across all backends)
+        val hotwords = editText(
+            R.string.voice_input_hotwords,
+            "voice_input_hotwords",
+            "",
+            multiline = true
+        )
+
+        // Auto hotwords
+        val autoHotwords = switch(
+            R.string.voice_input_auto_hotwords,
+            "voice_input_auto_hotwords",
+            true,
+            R.string.voice_input_auto_hotwords_summary
+        )
+        val autoHotwordsList = editText(
+            R.string.voice_input_auto_hotwords_list,
+            "voice_input_auto_hotwords_list",
+            "",
+            multiline = true
+        )
+
         // OpenCode backend
         val serverUrl = editText(
             R.string.voice_input_server_url,
@@ -467,6 +489,19 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
             // Backend type selector at top
             screen.addPreference(managedPreferencesUi.first { it.key == "voice_input_backend_type" }.createUi(ctx))
+
+            // Hotwords (shared across all backends)
+            val hotwordsPref = managedPreferencesUi.first { it.key == "voice_input_hotwords" }.createUi(ctx)
+            hotwordsPref.summaryProvider = null
+            hotwordsPref.summary = ctx.getString(R.string.voice_input_hotwords_summary)
+            screen.addPreference(hotwordsPref)
+
+            // Auto hotwords section
+            screen.addPreference(managedPreferencesUi.first { it.key == "voice_input_auto_hotwords" }.createUi(ctx))
+            val autoListPref = managedPreferencesUi.first { it.key == "voice_input_auto_hotwords_list" }.createUi(ctx)
+            autoListPref.summaryProvider = null
+            autoListPref.summary = ctx.getString(R.string.voice_input_auto_hotwords_list_summary)
+            screen.addPreference(autoListPref)
 
             // OpenCode section
             addCategory(screen, R.string.voice_backend_opencode, listOf(

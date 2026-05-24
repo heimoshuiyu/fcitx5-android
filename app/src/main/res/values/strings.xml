@@ -355,4 +355,10 @@
     <string name="voice_input_empty">No speech detected</string>
     <string name="voice_input_retry">Retry</string>
     <string name="voice_input_cancel">Cancel</string>
+    <string name="voice_input_hotwords">Hotwords</string>
+    <string name="voice_input_hotwords_summary">Custom words/phrases to help recognition accuracy (one per line). E.g. names, technical terms, product names.</string>
+    <string name="voice_input_auto_hotwords">Auto-learn hotwords</string>
+    <string name="voice_input_auto_hotwords_summary">Automatically add corrected words as hotwords when you edit transcribed text.</string>
+    <string name="voice_input_auto_hotwords_list">Auto-learned hotwords</string>
+    <string name="voice_input_auto_hotwords_list_summary">Words automatically learned from your corrections.</string>
 </resources>

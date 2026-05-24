@@ -35,6 +35,7 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyAction.ShowInputMethodPickerAc
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SpaceLongPressAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SymAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.UnicodeAction
+import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.voice.FloatingVoiceIndicator
 import org.fcitx.fcitx5.android.input.voice.HoldToTalkController
@@ -48,7 +49,8 @@ import org.mechdancer.dependency.manager.managedHandler
 import org.mechdancer.dependency.manager.must
 
 class CommonKeyActionListener :
-    UniqueComponent<CommonKeyActionListener>(), Dependent, ManagedHandler by managedHandler() {
+    UniqueComponent<CommonKeyActionListener>(), Dependent, ManagedHandler by managedHandler(),
+    InputBroadcastReceiver {
 
     enum class BackspaceSwipeState {
         Stopped, Selection, Reset
@@ -316,5 +318,35 @@ class CommonKeyActionListener :
                 }
             }
         }
+    }
+
+    override fun onSelectionUpdate(start: Int, end: Int) {
+        // Cache current text for auto hotword detection
+        holdToTalkController?.cacheCurrentText(start, end)
+    }
+
+    override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: org.fcitx.fcitx5.android.core.CapabilityFlags) {
+        // Input field changed — flush auto hotword detection, then reset
+        holdToTalkController?.flushAutoHotword()
+    }
+
+    override fun onWindowDetached(window: org.fcitx.fcitx5.android.input.wm.InputWindow) {
+        // Keyboard hidden — flush auto hotword detection, then clean up
+        holdToTalkController?.flushAutoHotword()
+        cleanupHoldToTalk()
+    }
+
+    private fun cleanupHoldToTalk() {
+        // Remove indicator view from parent to prevent leaks
+        floatingIndicator?.let { indicator ->
+            (indicator.view.parent as? android.view.ViewGroup)?.removeView(indicator.view)
+        }
+        floatingIndicator = null
+        holdToTalkController?.destroy()
+        holdToTalkController = null
+        amplitudeJob?.cancel()
+        amplitudeJob = null
+        stateObserverJob?.cancel()
+        stateObserverJob = null
     }
 }

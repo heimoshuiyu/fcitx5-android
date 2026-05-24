@@ -107,7 +107,8 @@ abstract class ManagedPreferenceUi<T : Preference>(
         val title: Int,
         key: String,
         val defaultValue: String,
-        enableUiOn: (() -> Boolean)? = null
+        enableUiOn: (() -> Boolean)? = null,
+        val multiline: Boolean = false
     ) : ManagedPreferenceUi<EditTextPreference>(key, enableUiOn) {
         override fun createUi(context: Context) = EditTextPreference(context).apply {
             key = this@EditText.key
@@ -117,6 +118,15 @@ abstract class ManagedPreferenceUi<T : Preference>(
             setDefaultValue(defaultValue)
             setTitle(this@EditText.title)
             setDialogTitle(this@EditText.title)
+            if (this@EditText.multiline) {
+                setOnBindEditTextListener { editText ->
+                    editText.isSingleLine = false
+                    editText.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                    editText.minLines = 3
+                    editText.gravity = android.view.Gravity.TOP
+                }
+            }
         }
     }
 

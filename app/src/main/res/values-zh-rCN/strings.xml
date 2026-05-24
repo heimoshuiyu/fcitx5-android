@@ -354,4 +354,10 @@
     <string name="voice_input_empty">未检测到语音</string>
     <string name="voice_input_retry">重试</string>
     <string name="voice_input_cancel">取消</string>
+    <string name="voice_input_hotwords">热词</string>
+    <string name="voice_input_hotwords_summary">自定义词汇/短语，提升识别准确率（每行一个）。例如人名、专业术语、产品名等。</string>
+    <string name="voice_input_auto_hotwords">自动学习热词</string>
+    <string name="voice_input_auto_hotwords_summary">编辑转写文本时，自动将修正的词添加为热词。</string>
+    <string name="voice_input_auto_hotwords_list">已学习的热词</string>
+    <string name="voice_input_auto_hotwords_list_summary">根据您的修正自动学习的热词。</string>
 </resources>
