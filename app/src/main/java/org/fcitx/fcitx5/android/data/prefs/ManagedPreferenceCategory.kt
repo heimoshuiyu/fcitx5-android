@@ -78,6 +78,20 @@ abstract class ManagedPreferenceCategory(
         return pref
     }
 
+    protected fun editText(
+        @StringRes
+        title: Int,
+        key: String,
+        defaultValue: String,
+        enableUiOn: (() -> Boolean)? = null
+    ): ManagedPreference.PString {
+        val pref = ManagedPreference.PString(sharedPreferences, key, defaultValue)
+        val ui = ManagedPreferenceUi.EditText(title, key, defaultValue, enableUiOn)
+        pref.register()
+        ui.registerUi()
+        return pref
+    }
+
     protected fun int(
         @StringRes
         title: Int,

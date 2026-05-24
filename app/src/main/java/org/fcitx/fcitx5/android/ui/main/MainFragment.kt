@@ -86,6 +86,11 @@ class MainFragment : PaddingPreferenceFragment() {
                     SettingsRoute.Symbol
                 )
                 addDestinationPreference(
+                    R.string.voice_input,
+                    R.drawable.ic_baseline_keyboard_voice_24,
+                    SettingsRoute.VoiceInput
+                )
+                addDestinationPreference(
                     R.string.plugins,
                     R.drawable.ic_baseline_android_24,
                     SettingsRoute.Plugin

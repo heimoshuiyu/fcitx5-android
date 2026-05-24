@@ -8,6 +8,7 @@ package org.fcitx.fcitx5.android.input.keyboard
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.daemon.launchOnReady
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
@@ -21,9 +22,11 @@ import org.fcitx.fcitx5.android.input.dialog.InputMethodPickerDialog
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener.BackspaceSwipeState.Reset
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener.BackspaceSwipeState.Selection
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener.BackspaceSwipeState.Stopped
+import org.fcitx.fcitx5.android.input.dependency.theme
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.CommitAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.DeleteSelectionAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.FcitxKeyAction
+import org.fcitx.fcitx5.android.input.keyboard.KeyAction.HoldToTalkAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.LangSwitchAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.MoveSelectionAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.PickerSwitchAction
@@ -33,8 +36,11 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SpaceLongPressAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SymAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.UnicodeAction
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
+import org.fcitx.fcitx5.android.input.voice.FloatingVoiceIndicator
+import org.fcitx.fcitx5.android.input.voice.HoldToTalkController
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.utils.switchToNextIME
+import org.fcitx.fcitx5.android.utils.toast
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
 import org.mechdancer.dependency.manager.ManagedHandler
@@ -51,6 +57,7 @@ class CommonKeyActionListener :
     private val context by manager.context()
     private val fcitx by manager.fcitx()
     private val service by manager.inputMethodService()
+    private val theme by manager.theme()
     private val preeditState: PreeditEmptyStateComponent by manager.must()
     private val horizontalCandidate: HorizontalCandidateComponent by manager.must()
     private val windowManager: InputWindowManager by manager.must()
@@ -63,6 +70,12 @@ class CommonKeyActionListener :
     private val langSwitchKeyBehavior by kbdPrefs.langSwitchKeyBehavior
 
     private var backspaceSwipeState = Stopped
+
+    // Hold-to-talk state
+    private var holdToTalkController: HoldToTalkController? = null
+    private var floatingIndicator: FloatingVoiceIndicator? = null
+    private var amplitudeJob: kotlinx.coroutines.Job? = null
+    private var stateObserverJob: kotlinx.coroutines.Job? = null
 
     // there should be a new fcitx API for this
     private suspend fun FcitxAPI.commitAndReset() {
@@ -180,9 +193,127 @@ class CommonKeyActionListener :
                             toggleIme()
                         }
                         SpaceLongPressBehavior.ShowPicker -> showInputMethodPicker()
+                        SpaceLongPressBehavior.HoldToTalk -> {
+                            // Should not reach here — handled by HoldToTalkAction
+                        }
                     }
                 }
-                else -> {}
+                is HoldToTalkAction -> {
+                    if (action.start) {
+                        startHoldToTalk()
+                    } else {
+                        stopHoldToTalk()
+                    }
+                }
+                 else -> {}
+            }
+        }
+    }
+
+    private fun startHoldToTalk() {
+        // Create controller and indicator if needed
+        if (holdToTalkController == null) {
+            holdToTalkController = HoldToTalkController(service)
+            startStateObserver()
+        }
+        if (floatingIndicator == null) {
+            floatingIndicator = FloatingVoiceIndicator(service, theme)
+            floatingIndicator!!.onRetryClicked = {
+                holdToTalkController?.retry()
+            }
+            floatingIndicator!!.onCancelClicked = {
+                holdToTalkController?.dismissRetry()
+            }
+            floatingIndicator!!.onCancelTranscriptionClicked = {
+                holdToTalkController?.cancelTranscription()
+            }
+            // Add indicator on top of the keyboard area
+            val containerView = windowManager.view
+            containerView.post {
+                containerView.addView(floatingIndicator!!.view)
+                floatingIndicator!!.view.bringToFront()
+            }
+        }
+
+        val controller = holdToTalkController!!
+        val indicator = floatingIndicator!!
+
+        // Start recording
+        when (val result = controller.startRecording()) {
+            HoldToTalkController.StartResult.STARTED -> {
+                indicator.showRecording()
+                // Observe amplitude for waveform
+                amplitudeJob?.cancel()
+                amplitudeJob = service.lifecycleScope.launch {
+                    controller.amplitude.collect { amp ->
+                        indicator.waveformView.post {
+                            indicator.waveformView.setAmplitude(amp)
+                        }
+                    }
+                }
+            }
+            HoldToTalkController.StartResult.NO_PERMISSION -> {
+                service.toast("语音输入需要麦克风权限，请在系统设置中授权")
+            }
+            HoldToTalkController.StartResult.ALREADY_ACTIVE -> {
+                // Already recording, ignore
+            }
+        }
+    }
+
+    private fun stopHoldToTalk() {
+        val controller = holdToTalkController ?: return
+        val indicator = floatingIndicator ?: return
+
+        // Stop recording, this triggers transcription
+        controller.stopRecording()
+        indicator.showTranscribing()
+    }
+
+    private fun startStateObserver() {
+        stateObserverJob?.cancel()
+        stateObserverJob = service.lifecycleScope.launch {
+            holdToTalkController?.state?.collect { state ->
+                val indicator = floatingIndicator ?: return@collect
+                when (state) {
+                    HoldToTalkController.State.IDLE -> {
+                        indicator.hide()
+                        amplitudeJob?.cancel()
+                        amplitudeJob = null
+                    }
+                    HoldToTalkController.State.RECORDING -> {
+                        // UI already shown by startHoldToTalk
+                    }
+                    HoldToTalkController.State.TRANSCRIBING -> {
+                        indicator.showTranscribing()
+                        amplitudeJob?.cancel()
+                        amplitudeJob = null
+                    }
+                    HoldToTalkController.State.RETRY_AVAILABLE -> {
+                        amplitudeJob?.cancel()
+                        amplitudeJob = null
+                    }
+                }
+            }
+        }
+
+        holdToTalkController?.listener = object : HoldToTalkController.Listener {
+            override fun onSuccess(text: String) {
+                floatingIndicator?.view?.post {
+                    floatingIndicator?.hide()
+                }
+            }
+
+            override fun onError(message: String) {
+                floatingIndicator?.view?.post {
+                    floatingIndicator?.showRetry(message)
+                }
+            }
+
+            override fun onEmptyResult() {
+                floatingIndicator?.view?.post {
+                    floatingIndicator?.showRetry(service.getString(R.string.voice_input_empty))
+                }
             }
         }
     }

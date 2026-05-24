@@ -102,6 +102,24 @@ abstract class ManagedPreferenceUi<T : Preference>(
         }
     }
 
+    class EditText(
+        @StringRes
+        val title: Int,
+        key: String,
+        val defaultValue: String,
+        enableUiOn: (() -> Boolean)? = null
+    ) : ManagedPreferenceUi<EditTextPreference>(key, enableUiOn) {
+        override fun createUi(context: Context) = EditTextPreference(context).apply {
+            key = this@EditText.key
+            isIconSpaceReserved = false
+            isSingleLineTitle = false
+            summaryProvider = EditTextPreference.SimpleSummaryProvider.getInstance()
+            setDefaultValue(defaultValue)
+            setTitle(this@EditText.title)
+            setDialogTitle(this@EditText.title)
+        }
+    }
+
     class EditTextInt(
         @StringRes
         val title: Int,

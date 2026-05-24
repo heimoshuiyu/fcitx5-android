@@ -202,6 +202,7 @@
     <string name="space_behavior_enumerate">轮换输入法</string>
     <string name="space_behavior_activate">在当前输入法和第一个输入法之间切换</string>
     <string name="space_behavior_picker">显示输入法选择对话框</string>
+    <string name="space_behavior_hold_to_talk">按住说话</string>
     <string name="show_lang_switch_key">显示语言切换键</string>
     <string name="horizontal_candidate_style">横向候选词样式</string>
     <string name="horizontal_candidate_never_fill">从不填充宽度</string>
@@ -317,4 +318,40 @@
     <string name="hide_unsupported_emojis">隐藏不支持的表情</string>
     <string name="key_border_stroke">启用按键边框描边</string>
     <string name="preferred_voice_input">首选语音输入</string>
+
+    <!-- Voice Input -->
+    <string name="voice_input">语音输入</string>
+    <string name="voice_input_backend">后端</string>
+    <string name="voice_backend_opencode">OpenCode</string>
+    <string name="voice_backend_whisper">Whisper</string>
+    <string name="voice_backend_lalm">LALM（语音大模型）</string>
+    <string name="voice_input_server_url">服务器地址</string>
+    <string name="voice_input_auth_username">用户名</string>
+    <string name="voice_input_auth_password">密码</string>
+    <string name="voice_input_opencode_model">模型（可选）</string>
+    <string name="voice_input_opencode_model_summary">覆盖转录模型。LALM 使用 provider/model 格式（如 openai/gpt-4o-audio-preview），Whisper 使用模型名称（如 whisper-1）。</string>
+    <string name="voice_input_opencode_voice_edit">语音编辑</string>
+    <string name="voice_input_whisper_url">OpenAI Base URL</string>
+    <string name="voice_input_whisper_api_key">API Key</string>
+    <string name="voice_input_whisper_model">模型</string>
+    <string name="voice_input_whisper_language">语言（可选）</string>
+    <string name="voice_input_lalm_url">OpenAI Base URL</string>
+    <string name="voice_input_lalm_api_key">API Key</string>
+    <string name="voice_input_lalm_model">模型</string>
+    <string name="voice_input_lalm_system_prompt">系统提示词（可选）</string>
+    <string name="voice_input_lalm_audio_format">音频格式</string>
+    <string name="voice_input_lalm_format_input_audio">input_audio（OpenAI 标准）</string>
+    <string name="voice_input_lalm_format_audio_url">audio_url（Data URI）</string>
+    <string name="voice_input_lalm_temperature">Temperature（可选）</string>
+    <string name="voice_input_lalm_voice_edit">语音编辑</string>
+    <string name="voice_input_lalm_voice_edit_summary">当选中文字时，语音输入将作为编辑指令（如翻译、润色）而非输入新文本</string>
+    <string name="accessibility_service_name">小企鹅输入法屏幕上下文</string>
+    <string name="accessibility_service_description">读取屏幕上可见的文字，为语音转文字提供更丰富的上下文。不会自动收集或发送任何数据——文字仅在您触发语音输入时本地用作提示词上下文。</string>
+    <string name="accessibility_service_summary">为语音转写提供屏幕文字上下文</string>
+    <string name="voice_input_listening">正在聆听…</string>
+    <string name="voice_input_transcribing">正在转录…</string>
+    <string name="voice_input_error">转录失败</string>
+    <string name="voice_input_empty">未检测到语音</string>
+    <string name="voice_input_retry">重试</string>
+    <string name="voice_input_cancel">取消</string>
 </resources>

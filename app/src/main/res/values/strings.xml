@@ -202,6 +202,7 @@
     <string name="space_behavior_enumerate">Enumerate input methods</string>
     <string name="space_behavior_activate">Toggle input method activate state</string>
     <string name="space_behavior_picker">Show input method picker dialog</string>
+    <string name="space_behavior_hold_to_talk">Hold to talk</string>
     <string name="show_lang_switch_key">Show language switch key</string>
     <string name="horizontal_candidate_style">Horizontal candidate style</string>
     <string name="horizontal_candidate_never_fill">Never fill width</string>
@@ -318,4 +319,40 @@
     <string name="key_border_stroke">Enable stroke for key border</string>
     <string name="preferred_voice_input">Preferred voice input</string>
     <string name="edit_text_playground">EditText Playground</string>
+
+    <!-- Voice Input (OpenCode) -->
+    <string name="voice_input">Voice Input</string>
+    <string name="voice_input_backend">Backend</string>
+    <string name="voice_backend_opencode">OpenCode</string>
+    <string name="voice_backend_whisper">Whisper</string>
+    <string name="voice_backend_lalm">LALM</string>
+    <string name="voice_input_server_url">Server URL</string>
+    <string name="voice_input_auth_username">Username</string>
+    <string name="voice_input_auth_password">Password</string>
+    <string name="voice_input_opencode_model">Model (optional)</string>
+    <string name="voice_input_opencode_model_summary">Override the transcription model. Use provider/model format (e.g. openai/gpt-4o-audio-preview) for LALM, or plain model name (e.g. whisper-1) for Whisper.</string>
+    <string name="voice_input_opencode_voice_edit">Voice edit</string>
+    <string name="voice_input_whisper_url">OpenAI Base URL</string>
+    <string name="voice_input_whisper_api_key">API Key</string>
+    <string name="voice_input_whisper_model">Model</string>
+    <string name="voice_input_whisper_language">Language (optional)</string>
+    <string name="voice_input_lalm_url">OpenAI Base URL</string>
+    <string name="voice_input_lalm_api_key">API Key</string>
+    <string name="voice_input_lalm_model">Model</string>
+    <string name="voice_input_lalm_system_prompt">System Prompt (optional)</string>
+    <string name="voice_input_lalm_audio_format">Audio Format</string>
+    <string name="voice_input_lalm_format_input_audio">input_audio (OpenAI standard)</string>
+    <string name="voice_input_lalm_format_audio_url">audio_url (data URI)</string>
+    <string name="voice_input_lalm_temperature">Temperature (optional)</string>
+    <string name="voice_input_lalm_voice_edit">Voice edit</string>
+    <string name="voice_input_lalm_voice_edit_summary">When text is selected, voice input acts as an edit instruction (e.g. translate, rephrase) instead of dictating new text</string>
+    <string name="accessibility_service_name">Fcitx5 screen text context</string>
+    <string name="accessibility_service_description">Reads visible on-screen text to provide richer context for voice transcription. No data is collected or sent anywhere automatically — text is only used locally as prompt context when you trigger voice input.</string>
+    <string name="accessibility_service_summary">Provides on-screen text as context for voice transcription</string>
+    <string name="voice_input_listening">Listening…</string>
+    <string name="voice_input_transcribing">Transcribing…</string>
+    <string name="voice_input_error">Transcription failed</string>
+    <string name="voice_input_empty">No speech detected</string>
+    <string name="voice_input_retry">Retry</string>
+    <string name="voice_input_cancel">Cancel</string>
 </resources>

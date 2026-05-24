@@ -19,6 +19,8 @@ import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateM
 import org.fcitx.fcitx5.android.input.keyboard.LangSwitchBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SwipeSymbolDirection
+import org.fcitx.fcitx5.android.input.voice.LalmAudioFormat
+import org.fcitx.fcitx5.android.input.voice.VoiceBackendType
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.EmojiModifier
 import org.fcitx.fcitx5.android.utils.DeviceUtil
@@ -365,6 +367,147 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         )
     }
 
+    inner class VoiceInput : ManagedPreferenceCategory(R.string.voice_input, sharedPreferences) {
+        val backendType = enumList(
+            R.string.voice_input_backend,
+            "voice_input_backend_type",
+            VoiceBackendType.OpenCode
+        )
+
+        // OpenCode backend
+        val serverUrl = editText(
+            R.string.voice_input_server_url,
+            "voice_input_server_url",
+            ""
+        )
+        val authUsername = editText(
+            R.string.voice_input_auth_username,
+            "voice_input_auth_username",
+            "opencode"
+        )
+        val authPassword = editText(
+            R.string.voice_input_auth_password,
+            "voice_input_auth_password",
+            ""
+        )
+        val opencodeModel = editText(
+            R.string.voice_input_opencode_model,
+            "voice_input_opencode_model",
+            ""
+        )
+        val opencodeVoiceEdit = switch(
+            R.string.voice_input_opencode_voice_edit,
+            "voice_input_opencode_voice_edit",
+            true,
+            R.string.voice_input_lalm_voice_edit_summary
+        )
+
+        // Whisper backend
+        val whisperUrl = editText(
+            R.string.voice_input_whisper_url,
+            "voice_input_whisper_url",
+            "https://api.openai.com/v1"
+        )
+        val whisperApiKey = editText(
+            R.string.voice_input_whisper_api_key,
+            "voice_input_whisper_api_key",
+            ""
+        )
+        val whisperModel = editText(
+            R.string.voice_input_whisper_model,
+            "voice_input_whisper_model",
+            "whisper-1"
+        )
+        val whisperLanguage = editText(
+            R.string.voice_input_whisper_language,
+            "voice_input_whisper_language",
+            ""
+        )
+
+        // LALM backend
+        val lalmUrl = editText(
+            R.string.voice_input_lalm_url,
+            "voice_input_lalm_url",
+            "https://api.openai.com/v1"
+        )
+        val lalmApiKey = editText(
+            R.string.voice_input_lalm_api_key,
+            "voice_input_lalm_api_key",
+            ""
+        )
+        val lalmModel = editText(
+            R.string.voice_input_lalm_model,
+            "voice_input_lalm_model",
+            ""
+        )
+        val lalmSystemPrompt = editText(
+            R.string.voice_input_lalm_system_prompt,
+            "voice_input_lalm_system_prompt",
+            ""
+        )
+        val lalmAudioFormat = enumList(
+            R.string.voice_input_lalm_audio_format,
+            "voice_input_lalm_audio_format",
+            LalmAudioFormat.InputAudio
+        )
+        val lalmTemperature = editText(
+            R.string.voice_input_lalm_temperature,
+            "voice_input_lalm_temperature",
+            ""
+        )
+        val lalmVoiceEdit = switch(
+            R.string.voice_input_lalm_voice_edit,
+            "voice_input_lalm_voice_edit",
+            true,
+            R.string.voice_input_lalm_voice_edit_summary
+        )
+
+        override fun createUi(screen: androidx.preference.PreferenceScreen) {
+            val ctx = screen.context
+
+            // Backend type selector at top
+            screen.addPreference(managedPreferencesUi.first { it.key == "voice_input_backend_type" }.createUi(ctx))
+
+            // OpenCode section
+            addCategory(screen, R.string.voice_backend_opencode, listOf(
+                "voice_input_server_url", "voice_input_auth_username", "voice_input_auth_password",
+                "voice_input_opencode_model", "voice_input_opencode_voice_edit"
+            ), ctx)
+
+            // Whisper section
+            addCategory(screen, R.string.voice_backend_whisper, listOf(
+                "voice_input_whisper_url", "voice_input_whisper_api_key",
+                "voice_input_whisper_model", "voice_input_whisper_language"
+            ), ctx)
+
+            // LALM section
+            addCategory(screen, R.string.voice_backend_lalm, listOf(
+                "voice_input_lalm_url", "voice_input_lalm_api_key",
+                "voice_input_lalm_model", "voice_input_lalm_system_prompt",
+                "voice_input_lalm_audio_format", "voice_input_lalm_temperature",
+                "voice_input_lalm_voice_edit"
+            ), ctx)
+        }
+
+        private fun addCategory(
+            screen: androidx.preference.PreferenceScreen,
+            @androidx.annotation.StringRes title: Int,
+            keys: List<String>,
+            ctx: android.content.Context
+        ) {
+            val category = androidx.preference.PreferenceCategory(ctx).apply {
+                setTitle(title)
+                isIconSpaceReserved = false
+            }
+            screen.addPreference(category)
+            keys.forEach { key ->
+                managedPreferencesUi.find { it.key == key }?.let { ui ->
+                    category.addPreference(ui.createUi(ctx))
+                }
+            }
+        }
+    }
+
     private val providers = mutableListOf<ManagedPreferenceProvider>()
 
     fun <T : ManagedPreferenceProvider> registerProvider(
@@ -384,6 +527,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
     val candidates = Candidates().register()
     val clipboard = Clipboard().register()
     val symbols = Symbols().register()
+    val voiceInput = VoiceInput().register()
     val advanced = Advanced().register()
 
     @Keep

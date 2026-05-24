@@ -44,6 +44,12 @@ android {
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round")
             resValue("string", "app_name", "@string/app_name_release")
             proguardFile("proguard-rules.pro")
+            signingConfig = signingConfigs.create("release") {
+                storeFile = file("../release.keystore")
+                storePassword = "fcitx5release"
+                keyAlias = "fcitx5"
+                keyPassword = "fcitx5release"
+            }
         }
         debug {
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher_debug")
@@ -114,6 +120,7 @@ dependencies {
     implementation(libs.flexbox)
     implementation(libs.dependency)
     implementation(libs.timber)
+    implementation(libs.okhttp)
     implementation(libs.splitties.bitflags)
     implementation(libs.splitties.dimensions)
     implementation(libs.splitties.resources)
