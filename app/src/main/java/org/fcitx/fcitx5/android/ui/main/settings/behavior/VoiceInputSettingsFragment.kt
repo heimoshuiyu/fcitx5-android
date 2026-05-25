@@ -6,8 +6,10 @@
 package org.fcitx.fcitx5.android.ui.main.settings.behavior
 
 import android.content.Intent
-import android.os.Build
+import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
+import android.util.Base64
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
@@ -15,10 +17,12 @@ import androidx.preference.PreferenceScreen
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceFragment
-import org.fcitx.fcitx5.android.input.voice.ScreenTextAccessibilityService
 import org.fcitx.fcitx5.android.input.voice.ScreenTextProvider
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
+import timber.log.Timber
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance().voiceInput) {
 
@@ -40,9 +44,20 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         }
         screen.addPreference(historyPref)
 
+        // Subscription entry — single item, order = 0
+        val subPref = Preference(context).apply {
+            key = "subscription_entry"
+            isPersistent = false
+            isSelectable = true
+            order = 0
+        }
+        screen.addPreference(subPref)
+        updateSubscriptionPref(subPref)
+
+        // Screen text context
         val category = PreferenceCategory(context).apply {
             title = "Screen text context"
-            order = 1000 // place after all managed prefs
+            order = 1000
         }
         screen.addPreference(category)
 
@@ -53,8 +68,60 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
             order = 0
         }
         category.addPreference(statusPref)
-
         updateStatusPref(statusPref)
+    }
+
+    private fun updateSubscriptionPref(pref: Preference) {
+        val context = pref.context
+        val prefs = AppPrefs.getInstance().voiceInput
+        val token = prefs.subscriptionAccessToken.getValue()
+
+        if (token.isNotEmpty()) {
+            pref.title = context.getString(R.string.subscription_status_authorized)
+            pref.summary = context.getString(R.string.subscription_status_authorized_summary)
+            pref.setOnPreferenceClickListener {
+                // Open account page on gateway (usage stats, plan, etc.)
+                val gatewayUrl = prefs.subscriptionGatewayUrl.getValue().trimEnd('/')
+                val authUrl = "$gatewayUrl/account?token=$token"
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+                true
+            }
+        } else {
+            pref.title = context.getString(R.string.subscription_status_not_authorized)
+            pref.summary = context.getString(R.string.subscription_sign_in_summary)
+            pref.setOnPreferenceClickListener {
+                val gatewayUrl = prefs.subscriptionGatewayUrl.getValue().trimEnd('/')
+
+                // Generate PKCE code_verifier (RFC 7636 §4.1: 43-128 chars, base64url)
+                val secureRandom = SecureRandom()
+                val verifierBytes = ByteArray(32)
+                secureRandom.nextBytes(verifierBytes)
+                val codeVerifier = Base64.encodeToString(
+                    verifierBytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+                )
+                // code_challenge = BASE64URL(SHA256(code_verifier))
+                val digest = MessageDigest.getInstance("SHA-256")
+                val challengeBytes = digest.digest(codeVerifier.toByteArray(Charsets.US_ASCII))
+                val codeChallenge = Base64.encodeToString(
+                    challengeBytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+                )
+
+                // Generate random state for CSRF protection
+                val stateBytes = ByteArray(16)
+                secureRandom.nextBytes(stateBytes)
+                val state = Base64.encodeToString(
+                    stateBytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+                )
+
+                // Save verifier and state for use in callback
+                prefs.oauthCodeVerifier.setValue(codeVerifier)
+                prefs.oauthState.setValue(state)
+
+                val authUrl = "$gatewayUrl/oauth/authorize?redirect_uri=fcitx5://oauth/callback&response_type=code&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state"
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+                true
+            }
+        }
     }
 
     private fun updateStatusPref(pref: Preference) {
@@ -65,7 +132,6 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
             pref.title = "Screen text service: Enabled"
             pref.summary = "On-screen text is being read to improve voice transcription accuracy."
             pref.setOnPreferenceClickListener {
-                // Navigate to accessibility settings to disable
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 true
             }
@@ -82,10 +148,14 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
     override fun onStart() {
         super.onStart()
-        // Refresh status when returning from accessibility settings
-        val pref = preferenceScreen.findPreference<Preference>("screen_text_accessibility_status")
-        if (pref != null) {
-            updateStatusPref(pref)
+        // Refresh subscription status when returning from OAuth or browser
+        val subPref = preferenceScreen.findPreference<Preference>("subscription_entry")
+        if (subPref != null) {
+            updateSubscriptionPref(subPref)
+        }
+        val statusPref = preferenceScreen.findPreference<Preference>("screen_text_accessibility_status")
+        if (statusPref != null) {
+            updateStatusPref(statusPref)
         }
     }
 }

@@ -11,4 +11,5 @@ enum class VoiceBackendType(override val stringRes: Int) : ManagedPreferenceEnum
     OpenCode(R.string.voice_backend_opencode),
     Whisper(R.string.voice_backend_whisper),
     LALM(R.string.voice_backend_lalm),
+    Subscription(R.string.voice_backend_subscription),
 }

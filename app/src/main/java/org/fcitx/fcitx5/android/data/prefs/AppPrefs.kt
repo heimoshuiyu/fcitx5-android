@@ -484,6 +484,14 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             R.string.voice_input_lalm_voice_edit_summary
         )
 
+        // Subscription backend (internal prefs, not shown as editable fields)
+        val subscriptionAccessToken = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_access_token", "").apply { register() }
+        val subscriptionRefreshToken = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_refresh_token", "").apply { register() }
+        val subscriptionGatewayUrl = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_gateway_url", "http://192.168.39.198:8972").apply { register() }
+        // OAuth PKCE + state (transient, cleared after token exchange)
+        val oauthCodeVerifier = ManagedPreference.PString(sharedPreferences, "voice_input_oauth_code_verifier", "").apply { register() }
+        val oauthState = ManagedPreference.PString(sharedPreferences, "voice_input_oauth_state", "").apply { register() }
+
         override fun createUi(screen: androidx.preference.PreferenceScreen) {
             val ctx = screen.context
 

@@ -367,4 +367,16 @@
     <string name="transcription_history_clear_title">Clear history</string>
     <string name="transcription_history_clear_message">Delete all transcription records?</string>
     <string name="transcription_detail_title">Transcription Detail</string>
+    <!-- Subscription -->
+    <string name="voice_backend_subscription">Subscription</string>
+    <string name="subscription_status_authorized">Subscription: Signed in</string>
+    <string name="subscription_status_authorized_summary">Tap to manage your subscription and view usage.</string>
+    <string name="subscription_status_not_authorized">Subscription: Not signed in</string>
+    <string name="subscription_status_not_authorized_summary">Sign in to use the voice input subscription service.</string>
+    <string name="subscription_sign_in">Sign in</string>
+    <string name="subscription_sign_in_summary">Open browser to sign in or register, then authorize voice input access.</string>
+    <string name="subscription_sign_out">Sign out</string>
+    <string name="subscription_sign_out_summary">Disconnect your subscription account.</string>
+    <string name="subscription_signed_out">Signed out</string>
+    <string name="subscription_auth_success">Authorization successful</string>
 </resources>

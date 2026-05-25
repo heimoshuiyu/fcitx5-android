@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
@@ -107,16 +108,21 @@ class MainActivity : AppCompatActivity() {
             Intent.ACTION_MAIN -> if (SetupActivity.shouldShowUp()) {
                 startActivity<SetupActivity>()
             }
-            Intent.ACTION_VIEW -> intent.data?.let {
-                AlertDialog.Builder(this)
-                    .setTitle(R.string.pinyin_dict)
-                    .setMessage(R.string.whether_import_dict)
-                    .setNegativeButton(android.R.string.cancel) { _, _ -> }
-                    .setPositiveButton(android.R.string.ok) { _, _ ->
-                        navController.popBackStack(SettingsRoute.Index, false)
-                        navController.navigateWithAnim(SettingsRoute.PinyinDict(it))
-                    }
-                    .show()
+            Intent.ACTION_VIEW -> {
+                val data = intent.data ?: return
+                if (data.scheme == "fcitx5" && data.host == "oauth" && data.path?.startsWith("/callback") == true) {
+                    handleOAuthCallback(data)
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle(R.string.pinyin_dict)
+                        .setMessage(R.string.whether_import_dict)
+                        .setNegativeButton(android.R.string.cancel) { _, _ -> }
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            navController.popBackStack(SettingsRoute.Index, false)
+                            navController.navigateWithAnim(SettingsRoute.PinyinDict(data))
+                        }
+                        .show()
+                }
             }
             Intent.ACTION_RUN -> {
                 val route = intent.parcelable<SettingsRoute>(EXTRA_SETTINGS_ROUTE) ?: return
@@ -124,6 +130,101 @@ class MainActivity : AppCompatActivity() {
                 navController.navigateWithAnim(route)
             }
         }
+    }
+
+    private fun handleOAuthCallback(data: Uri) {
+        val code = data.getQueryParameter("code")
+        val state = data.getQueryParameter("state")
+        val error = data.getQueryParameter("error")
+
+        if (error != null) {
+            val desc = data.getQueryParameter("error_description") ?: error
+            Toast.makeText(this, "Authorization failed: $desc", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // Verify state parameter (CSRF protection)
+        val prefs = AppPrefs.getInstance().voiceInput
+        val savedState = prefs.oauthState.getValue()
+        if (state.isNullOrEmpty() || state != savedState) {
+            Toast.makeText(this, "Authorization failed: invalid state (possible CSRF)", Toast.LENGTH_LONG).show()
+            // Clear OAuth state
+            prefs.oauthState.setValue("")
+            prefs.oauthCodeVerifier.setValue("")
+            return
+        }
+
+        if (code == null) {
+            Toast.makeText(this, "Authorization failed: invalid callback", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // Read PKCE code_verifier saved before login
+        val codeVerifier = prefs.oauthCodeVerifier.getValue()
+
+        // Exchange code for tokens via gateway
+        val gatewayUrl = prefs.subscriptionGatewayUrl.getValue().trimEnd('/')
+
+        Thread {
+            try {
+                val client = okhttp3.OkHttpClient()
+                val formBuilder = okhttp3.FormBody.Builder()
+                    .add("code", code)
+                    .add("grant_type", "authorization_code")
+                    .add("redirect_uri", "fcitx5://oauth/callback")
+
+                // Include PKCE code_verifier if available
+                if (codeVerifier.isNotEmpty()) {
+                    formBuilder.add("code_verifier", codeVerifier)
+                }
+
+                val request = okhttp3.Request.Builder()
+                    .url("$gatewayUrl/oauth/token")
+                    .post(formBuilder.build())
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val responseBody = response.body?.string()
+
+                if (response.isSuccessful && responseBody != null) {
+                    val json = org.json.JSONObject(responseBody)
+                    val accessToken = json.getString("access_token")
+                    val refreshToken = json.optString("refresh_token", "")
+
+                    prefs.subscriptionAccessToken.setValue(accessToken)
+                    if (refreshToken.isNotEmpty()) {
+                        prefs.subscriptionRefreshToken.setValue(refreshToken)
+                    }
+
+                    // Clear OAuth transient state (PKCE verifier + state)
+                    prefs.oauthCodeVerifier.setValue("")
+                    prefs.oauthState.setValue("")
+
+                    runOnUiThread {
+                        Toast.makeText(this, R.string.subscription_auth_success, Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this,
+                            "Authorization failed: ${response.code}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                // Clear OAuth transient state on error too
+                prefs.oauthCodeVerifier.setValue("")
+                prefs.oauthState.setValue("")
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        "Authorization error: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
     }
 
     private fun setupToolbarMenu(menu: Menu) {

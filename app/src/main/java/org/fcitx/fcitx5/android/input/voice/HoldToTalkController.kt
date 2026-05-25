@@ -75,6 +75,10 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                 getAudioFormat = { prefs.lalmAudioFormat.getValue() },
                 getTemperature = { prefs.lalmTemperature.getValue() },
             )
+            VoiceBackendType.Subscription -> SubscriptionBackend(
+                getGatewayUrl = { prefs.subscriptionGatewayUrl.getValue() },
+                getAccessToken = { prefs.subscriptionAccessToken.getValue() },
+            )
         }
     }
 
@@ -176,6 +180,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                 is OpenCodeBackend -> if (prefs.opencodeVoiceEdit.getValue()) {
                     ic?.getSelectedText(0)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
                 } else null
+                is SubscriptionBackend -> ic?.getSelectedText(0)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
                 else -> null
             }
             Timber.d("editMode: backend=${backend.name}, selectedText=${if (selectedText != null) "${selectedText.length} chars" else "null"}")
@@ -329,9 +334,37 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         }
     }
 
+    private fun getAppName(): String? {
+        val info = service.currentInputEditorInfo ?: return null
+        val packageName = info.packageName ?: return null
+        return try {
+            val appInfo = service.packageManager.getApplicationInfo(packageName, 0)
+            service.packageManager.getApplicationLabel(appInfo).toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun getHintText(): String? {
+        val info = service.currentInputEditorInfo ?: return null
+        return info.hintText?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
     private fun buildPrompt(editMode: Boolean = false): String? {
         val ic = service.currentInputConnection ?: return null
         val parts = mutableListOf<String>()
+
+        // App name
+        val appName = getAppName()
+        if (appName != null) {
+            parts.add("<app>$appName</app>")
+        }
+
+        // Input field hint/placeholder
+        val hintText = getHintText()
+        if (hintText != null) {
+            parts.add("<hint>$hintText</hint>")
+        }
 
         // Hotwords — merge manual and auto-learned lists
         val manualHotwords = prefs.hotwords.getValue().trim()
