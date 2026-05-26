@@ -359,4 +359,21 @@
     <string name="voice_input_history">轉錄歷史</string>
     <string name="voice_input_history_summary">檢視歷史轉錄記錄，包括提示詞、結果和原始 API 回應。</string>
     <string name="voice_backend_subscription">訂閱服務</string>
+    <!-- Subscription -->
+    <string name="subscription_status_authorized">訂閱服務：已登入</string>
+    <string name="subscription_status_authorized_summary">點擊管理您的訂閱和查看用量。</string>
+    <string name="subscription_status_not_authorized">訂閱服務：未登入</string>
+    <string name="subscription_status_not_authorized_summary">登入後即可使用語音輸入訂閱服務。</string>
+    <string name="subscription_sign_in">登入</string>
+    <string name="subscription_sign_in_summary">開啟瀏覽器登入或註冊，然後授權語音輸入。</string>
+    <string name="subscription_sign_out">登出</string>
+    <string name="subscription_sign_out_summary">中斷您的訂閱帳號連接。</string>
+    <string name="subscription_signed_out">已登出</string>
+    <string name="subscription_auth_success">授權成功</string>
+    <!-- Screen text context -->
+    <string name="screen_text_context">螢幕文字上下文</string>
+    <string name="screen_text_enabled">螢幕文字服務：已啟用</string>
+    <string name="screen_text_enabled_summary">正在讀取螢幕文字以提升語音辨識準確度。</string>
+    <string name="screen_text_not_enabled">螢幕文字服務：未啟用</string>
+    <string name="screen_text_not_enabled_summary">啟用無障礙服務以讀取螢幕文字作為語音辨識上下文。需要在系統設定 > 無障礙中單獨授權。</string>
 </resources>

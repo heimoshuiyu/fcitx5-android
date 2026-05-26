@@ -371,7 +371,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val backendType = enumList(
             R.string.voice_input_backend,
             "voice_input_backend_type",
-            VoiceBackendType.OpenCode
+            VoiceBackendType.Subscription
         )
 
         // Hotwords (shared across all backends)

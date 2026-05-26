@@ -8,8 +8,8 @@ import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceEnum
 
 enum class VoiceBackendType(override val stringRes: Int) : ManagedPreferenceEnum {
+    Subscription(R.string.voice_backend_subscription),
     OpenCode(R.string.voice_backend_opencode),
     Whisper(R.string.voice_backend_whisper),
     LALM(R.string.voice_backend_lalm),
-    Subscription(R.string.voice_backend_subscription),
 }

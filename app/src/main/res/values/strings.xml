@@ -380,4 +380,10 @@
     <string name="subscription_sign_out_summary">Disconnect your subscription account.</string>
     <string name="subscription_signed_out">Signed out</string>
     <string name="subscription_auth_success">Authorization successful</string>
+    <!-- Screen text context -->
+    <string name="screen_text_context">Screen text context</string>
+    <string name="screen_text_enabled">Screen text service: Enabled</string>
+    <string name="screen_text_enabled_summary">On-screen text is being read to improve voice transcription accuracy.</string>
+    <string name="screen_text_not_enabled">Screen text service: Not enabled</string>
+    <string name="screen_text_not_enabled_summary">Enable the accessibility service to read on-screen text as voice transcription context. This requires a separate permission grant in system Settings > Accessibility.</string>
 </resources>

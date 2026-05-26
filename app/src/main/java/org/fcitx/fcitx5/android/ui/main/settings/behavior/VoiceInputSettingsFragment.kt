@@ -6,6 +6,7 @@
 package org.fcitx.fcitx5.android.ui.main.settings.behavior
 
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
@@ -25,6 +26,21 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance().voiceInput) {
+
+    private val prefs = AppPrefs.getInstance().voiceInput
+
+    private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "voice_input_subscription_access_token") {
+            // SharedPreferences listener fires on the thread that made the change
+            // (may be a background thread from OAuth token exchange), so post to UI
+            view?.post {
+                val subPref = preferenceScreen.findPreference<Preference>("subscription_entry")
+                if (subPref != null) {
+                    updateSubscriptionPref(subPref)
+                }
+            }
+        }
+    }
 
     override fun onPreferenceUiCreated(screen: PreferenceScreen) {
         val context = screen.context
@@ -56,7 +72,7 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
         // Screen text context
         val category = PreferenceCategory(context).apply {
-            title = "Screen text context"
+            title = context.getString(R.string.screen_text_context)
             order = 1000
         }
         screen.addPreference(category)
@@ -129,16 +145,15 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         val enabled = ScreenTextProvider.isServiceEnabledInSettings(context)
 
         if (enabled) {
-            pref.title = "Screen text service: Enabled"
-            pref.summary = "On-screen text is being read to improve voice transcription accuracy."
+            pref.title = context.getString(R.string.screen_text_enabled)
+            pref.summary = context.getString(R.string.screen_text_enabled_summary)
             pref.setOnPreferenceClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 true
             }
         } else {
-            pref.title = "Screen text service: Not enabled"
-            pref.summary = "Enable the accessibility service to read on-screen text as voice transcription context. " +
-                "This requires a separate permission grant in system Settings > Accessibility."
+            pref.title = context.getString(R.string.screen_text_not_enabled)
+            pref.summary = context.getString(R.string.screen_text_not_enabled_summary)
             pref.setOnPreferenceClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 true
@@ -146,9 +161,12 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        // Refresh subscription status when returning from OAuth or browser
+    override fun onResume() {
+        super.onResume()
+        // Register preference change listener to auto-refresh subscription status
+        // (e.g. when OAuth callback completes token exchange in background)
+        preferenceManager.sharedPreferences!!.registerOnSharedPreferenceChangeListener(prefChangeListener)
+        // Also refresh immediately in case the change happened while we were paused
         val subPref = preferenceScreen.findPreference<Preference>("subscription_entry")
         if (subPref != null) {
             updateSubscriptionPref(subPref)
@@ -157,5 +175,10 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         if (statusPref != null) {
             updateStatusPref(statusPref)
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        preferenceManager.sharedPreferences!!.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
     }
 }

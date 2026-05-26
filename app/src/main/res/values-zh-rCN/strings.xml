@@ -379,4 +379,10 @@
     <string name="subscription_sign_out_summary">断开您的订阅账号连接。</string>
     <string name="subscription_signed_out">已退出登录</string>
     <string name="subscription_auth_success">授权成功</string>
+    <!-- Screen text context -->
+    <string name="screen_text_context">屏幕文本上下文</string>
+    <string name="screen_text_enabled">屏幕文本服务：已启用</string>
+    <string name="screen_text_enabled_summary">正在读取屏幕文本以提升语音识别准确度。</string>
+    <string name="screen_text_not_enabled">屏幕文本服务：未启用</string>
+    <string name="screen_text_not_enabled_summary">启用无障碍服务以读取屏幕文本作为语音识别上下文。需要在系统设置 > 无障碍中单独授权。</string>
 </resources>
