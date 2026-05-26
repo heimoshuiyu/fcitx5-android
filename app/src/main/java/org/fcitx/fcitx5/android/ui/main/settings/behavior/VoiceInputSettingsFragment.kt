@@ -6,11 +6,13 @@
 package org.fcitx.fcitx5.android.ui.main.settings.behavior
 
 import android.content.Intent
+import android.content.DialogInterface
 import android.content.SharedPreferences
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import android.util.Base64
+import androidx.appcompat.app.AlertDialog
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
@@ -96,10 +98,28 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
             pref.title = context.getString(R.string.subscription_status_authorized)
             pref.summary = context.getString(R.string.subscription_status_authorized_summary)
             pref.setOnPreferenceClickListener {
-                // Open account page on gateway (usage stats, plan, etc.)
                 val gatewayUrl = prefs.subscriptionGatewayUrl.getValue().trimEnd('/')
-                val authUrl = "$gatewayUrl/account?token=$token"
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+                AlertDialog.Builder(context)
+                    .setTitle(R.string.subscription_status_authorized)
+                    .setItems(arrayOf(
+                        context.getString(R.string.subscription_manage_account),
+                        context.getString(R.string.subscription_sign_out)
+                    )) { _, which ->
+                        when (which) {
+                            0 -> {
+                                val authUrl = "$gatewayUrl/account?token=$token"
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+                            }
+                            1 -> {
+                                prefs.subscriptionAccessToken.setValue("")
+                                prefs.subscriptionRefreshToken.setValue("")
+                                updateSubscriptionPref(pref)
+                                Toast.makeText(context, R.string.subscription_signed_out, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
                 true
             }
         } else {

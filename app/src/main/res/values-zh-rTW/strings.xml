@@ -370,6 +370,7 @@
     <string name="subscription_sign_out_summary">中斷您的訂閱帳號連接。</string>
     <string name="subscription_signed_out">已登出</string>
     <string name="subscription_auth_success">授權成功</string>
+    <string name="subscription_manage_account">管理帳戶</string>
     <!-- Screen text context -->
     <string name="screen_text_context">螢幕文字上下文</string>
     <string name="screen_text_enabled">螢幕文字服務：已啟用</string>
