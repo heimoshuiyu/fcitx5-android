@@ -316,4 +316,47 @@
     <string name="emoji_skin_tone_type_6">🏿 深膚色 (Type-6)</string>
     <string name="hide_unsupported_emojis">隱藏不支援的表情</string>
     <string name="preferred_voice_input">首選語音輸入</string>
+
+    <!-- Voice Input -->
+    <string name="voice_input">語音輸入</string>
+    <string name="voice_input_general">一般</string>
+    <string name="voice_input_backend">後端</string>
+    <string name="voice_backend_opencode">OpenCode</string>
+    <string name="voice_backend_whisper">Whisper</string>
+    <string name="voice_backend_lalm">LALM（語音大模型）</string>
+    <string name="voice_input_server_url">伺服器位址</string>
+    <string name="voice_input_auth_username">使用者名稱</string>
+    <string name="voice_input_auth_password">密碼</string>
+    <string name="voice_input_opencode_model">模型（選填）</string>
+    <string name="voice_input_opencode_model_summary">覆蓋轉錄模型。LALM 使用 provider/model 格式（如 openai/gpt-4o-audio-preview），Whisper 使用模型名稱（如 whisper-1）。</string>
+    <string name="voice_input_opencode_voice_edit">語音編輯</string>
+    <string name="voice_input_whisper_url">OpenAI Base URL</string>
+    <string name="voice_input_whisper_api_key">API Key</string>
+    <string name="voice_input_whisper_model">模型</string>
+    <string name="voice_input_whisper_language">語言（選填）</string>
+    <string name="voice_input_lalm_url">OpenAI Base URL</string>
+    <string name="voice_input_lalm_api_key">API Key</string>
+    <string name="voice_input_lalm_model">模型</string>
+    <string name="voice_input_lalm_system_prompt">系統提示詞（選填）</string>
+    <string name="voice_input_lalm_audio_format">音訊格式</string>
+    <string name="voice_input_lalm_format_input_audio">input_audio（OpenAI 標準）</string>
+    <string name="voice_input_lalm_format_audio_url">audio_url（Data URI）</string>
+    <string name="voice_input_lalm_temperature">Temperature（選填）</string>
+    <string name="voice_input_lalm_voice_edit">語音編輯</string>
+    <string name="voice_input_lalm_voice_edit_summary">選取文字時，語音輸入將作為編輯指令（如翻譯、潤飾）而非輸入新文字</string>
+    <string name="voice_input_listening">正在聆聽…</string>
+    <string name="voice_input_transcribing">正在轉錄…</string>
+    <string name="voice_input_error">轉錄失敗</string>
+    <string name="voice_input_empty">未偵測到語音</string>
+    <string name="voice_input_retry">重試</string>
+    <string name="voice_input_cancel">取消</string>
+    <string name="voice_input_hotwords">熱詞</string>
+    <string name="voice_input_hotwords_summary">自訂詞彙/短語，提升辨識準確率（每行一個）。例如人名、專業術語、產品名等。</string>
+    <string name="voice_input_auto_hotwords">自動學習熱詞</string>
+    <string name="voice_input_auto_hotwords_summary">編輯轉錄文字時，自動將修正的詞加入熱詞。</string>
+    <string name="voice_input_auto_hotwords_list">已學習的熱詞</string>
+    <string name="voice_input_auto_hotwords_list_summary">根據您的修正自動學習的熱詞。</string>
+    <string name="voice_input_history">轉錄歷史</string>
+    <string name="voice_input_history_summary">檢視歷史轉錄記錄，包括提示詞、結果和原始 API 回應。</string>
+    <string name="voice_backend_subscription">訂閱服務</string>
 </resources>

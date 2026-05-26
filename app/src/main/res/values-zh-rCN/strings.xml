@@ -321,6 +321,7 @@
 
     <!-- Voice Input -->
     <string name="voice_input">语音输入</string>
+    <string name="voice_input_general">通用</string>
     <string name="voice_input_backend">后端</string>
     <string name="voice_backend_opencode">OpenCode</string>
     <string name="voice_backend_whisper">Whisper</string>

@@ -487,7 +487,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         // Subscription backend (internal prefs, not shown as editable fields)
         val subscriptionAccessToken = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_access_token", "").apply { register() }
         val subscriptionRefreshToken = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_refresh_token", "").apply { register() }
-        val subscriptionGatewayUrl = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_gateway_url", "http://192.168.39.198:8972").apply { register() }
+        val subscriptionGatewayUrl = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_gateway_url", "https://voice.aquarium39.moe").apply { register() }
         // OAuth PKCE + state (transient, cleared after token exchange)
         val oauthCodeVerifier = ManagedPreference.PString(sharedPreferences, "voice_input_oauth_code_verifier", "").apply { register() }
         val oauthState = ManagedPreference.PString(sharedPreferences, "voice_input_oauth_state", "").apply { register() }
@@ -495,21 +495,20 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         override fun createUi(screen: androidx.preference.PreferenceScreen) {
             val ctx = screen.context
 
-            // Backend type selector at top
-            screen.addPreference(managedPreferencesUi.first { it.key == "voice_input_backend_type" }.createUi(ctx))
-
-            // Hotwords (shared across all backends)
-            val hotwordsPref = managedPreferencesUi.first { it.key == "voice_input_hotwords" }.createUi(ctx)
-            hotwordsPref.summaryProvider = null
-            hotwordsPref.summary = ctx.getString(R.string.voice_input_hotwords_summary)
-            screen.addPreference(hotwordsPref)
-
-            // Auto hotwords section
-            screen.addPreference(managedPreferencesUi.first { it.key == "voice_input_auto_hotwords" }.createUi(ctx))
-            val autoListPref = managedPreferencesUi.first { it.key == "voice_input_auto_hotwords_list" }.createUi(ctx)
-            autoListPref.summaryProvider = null
-            autoListPref.summary = ctx.getString(R.string.voice_input_auto_hotwords_list_summary)
-            screen.addPreference(autoListPref)
+            // General section (backend type + hotwords)
+            val generalCategory = addCategory(screen, R.string.voice_input_general, listOf(
+                "voice_input_backend_type", "voice_input_hotwords",
+                "voice_input_auto_hotwords", "voice_input_auto_hotwords_list"
+            ), ctx)
+            // Set custom summaries
+            generalCategory.findPreference<androidx.preference.Preference>("voice_input_hotwords")?.let {
+                it.summaryProvider = null
+                it.summary = ctx.getString(R.string.voice_input_hotwords_summary)
+            }
+            generalCategory.findPreference<androidx.preference.Preference>("voice_input_auto_hotwords_list")?.let {
+                it.summaryProvider = null
+                it.summary = ctx.getString(R.string.voice_input_auto_hotwords_list_summary)
+            }
 
             // OpenCode section
             addCategory(screen, R.string.voice_backend_opencode, listOf(
@@ -537,7 +536,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             @androidx.annotation.StringRes title: Int,
             keys: List<String>,
             ctx: android.content.Context
-        ) {
+        ): androidx.preference.PreferenceCategory {
             val category = androidx.preference.PreferenceCategory(ctx).apply {
                 setTitle(title)
                 isIconSpaceReserved = false
@@ -548,6 +547,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
                     category.addPreference(ui.createUi(ctx))
                 }
             }
+            return category
         }
     }
 

@@ -38,18 +38,30 @@ android {
         resValues = true
     }
 
+    signingConfigs {
+        val signKeyPwd: String? = System.getenv("SIGN_KEY_PWD")
+            ?: project.findProperty("signKeyPwd") as? String
+        if (signKeyPwd != null) {
+            create("release") {
+                val signKeyFile = System.getenv("SIGN_KEY_FILE")
+                    ?: project.findProperty("signKeyFile") as? String
+                storeFile = file(signKeyFile ?: "../release.keystore")
+                storePassword = signKeyPwd
+                keyAlias = System.getenv("SIGN_KEY_ALIAS")
+                    ?: project.findProperty("signKeyAlias") as? String
+                    ?: "fcitx5"
+                keyPassword = signKeyPwd
+            }
+        }
+    }
+
     buildTypes {
         release {
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round")
             resValue("string", "app_name", "@string/app_name_release")
             proguardFile("proguard-rules.pro")
-            signingConfig = signingConfigs.create("release") {
-                storeFile = file("../release.keystore")
-                storePassword = "fcitx5release"
-                keyAlias = "fcitx5"
-                keyPassword = "fcitx5release"
-            }
+            signingConfig = signingConfigs.findByName("release")
         }
         debug {
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher_debug")
