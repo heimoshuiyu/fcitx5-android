@@ -7,9 +7,12 @@ package org.fcitx.fcitx5.android.ui.main.settings.behavior
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import android.os.Bundle
+import android.util.Base64
+import android.graphics.BitmapFactory
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +87,24 @@ class TranscriptionDetailFragment : Fragment() {
             if (record.selectedText.isNotEmpty()) {
                 view.findViewById<View>(R.id.section_selected_text)?.visibility = View.VISIBLE
                 view.findViewById<TextView>(R.id.text_selected_text)?.text = record.selectedText
+            }
+
+            // Screenshot
+            if (record.screenshotBase64.isNotEmpty()) {
+                try {
+                    val section = view.findViewById<View>(R.id.section_screenshot)
+                    val imageView = view.findViewById<ImageView>(R.id.image_screenshot)
+                    // Strip data URI prefix: "data:image/jpeg;base64,"
+                    val base64Data = record.screenshotBase64.substringAfter("base64,")
+                    val imageBytes = Base64.decode(base64Data, Base64.DEFAULT)
+                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                    if (bitmap != null) {
+                        imageView.setImageBitmap(bitmap)
+                        section?.visibility = View.VISIBLE
+                    }
+                } catch (e: Exception) {
+                    // Ignore screenshot decode errors
+                }
             }
 
             view.findViewById<TextView>(R.id.text_raw_response)?.text =

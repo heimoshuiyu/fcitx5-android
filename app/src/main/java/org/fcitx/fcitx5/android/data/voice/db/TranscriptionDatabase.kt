@@ -9,7 +9,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [TranscriptionRecord::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class TranscriptionDatabase : RoomDatabase() {

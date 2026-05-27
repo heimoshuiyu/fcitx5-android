@@ -28,13 +28,15 @@ interface VoiceBackend {
      * @param prompt optional context prompt for the transcription
      * @param selectedText if non-null, the backend should treat the voice as
      *   an instruction to edit this text (instead of transcribing to new text)
+     * @param imageBase64 optional screenshot as data URI (e.g. "data:image/jpeg;base64,...")
      * @return Result with [TranscriptionResult] on success
      */
     suspend fun transcribe(
         audioBytes: ByteArray,
         mime: String,
         prompt: String?,
-        selectedText: String? = null
+        selectedText: String? = null,
+        imageBase64: String? = null
     ): Result<TranscriptionResult>
 
     /** Human-readable name for error messages */

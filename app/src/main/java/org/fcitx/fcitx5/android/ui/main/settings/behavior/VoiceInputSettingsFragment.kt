@@ -17,6 +17,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreference
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceFragment
@@ -87,6 +88,16 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         }
         category.addPreference(statusPref)
         updateStatusPref(statusPref)
+
+        // Screenshot toggle — below accessibility status
+        val screenshotPref = SwitchPreference(context).apply {
+            key = "voice_input_screen_screenshot"
+            title = context.getString(R.string.voice_input_screen_screenshot)
+            summary = context.getString(R.string.voice_input_screen_screenshot_summary)
+            order = 1
+            setDefaultValue(false)
+        }
+        category.addPreference(screenshotPref)
     }
 
     private fun updateSubscriptionPref(pref: Preference) {

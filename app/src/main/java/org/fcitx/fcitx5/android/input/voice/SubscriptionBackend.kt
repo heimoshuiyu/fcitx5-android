@@ -119,7 +119,8 @@ class SubscriptionBackend(
         audioBytes: ByteArray,
         mime: String,
         prompt: String?,
-        selectedText: String?
+        selectedText: String?,
+        @Suppress("UNUSED_PARAMETER") imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runCatching {
             val gatewayUrl = getGatewayUrl()

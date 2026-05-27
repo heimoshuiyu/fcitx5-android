@@ -114,6 +114,14 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         cachedAudio = null
         _state.value = State.RECORDING
 
+        // Trigger screenshot capture while recording (async, will be ready by transcription time)
+        // Only if the user has enabled the screenshot setting
+        if (prefs.screenScreenshot.getValue()) {
+            ScreenTextProvider.requestScreenshot()
+        } else {
+            ScreenTextProvider.updateScreenshot(null)
+        }
+
         recordingJob = service.lifecycleScope.launch {
             try {
                 val wavBytes = audioRecorder.recordUntil()
@@ -194,7 +202,11 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
             }
             Timber.d("editMode: backend=${backend.name}, selectedText=${if (selectedText != null) "${selectedText.length} chars" else "null"}")
             val prompt = buildPrompt(selectedText != null)
-            val result = backend.transcribe(audioBytes, "audio/wav", prompt, selectedText)
+            val screenshot = if (prefs.screenScreenshot.getValue()) {
+                ScreenTextProvider.screenshotBase64
+            } else null
+            Timber.d("screenshot: ${if (screenshot != null) "${screenshot.length} chars" else "null"}")
+            val result = backend.transcribe(audioBytes, "audio/wav", prompt, selectedText, screenshot)
             val durationMs = System.currentTimeMillis() - startTime
 
             result.onSuccess { transcriptionResult ->
@@ -212,6 +224,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                     rawResponseBody = transcriptionResult.rawResponseBody,
                     audioDurationSec = audioDurationSec,
                     audioSizeBytes = audioSize,
+                    screenshotBase64 = screenshot ?: "",
                 )
 
                 if (text.isNotBlank()) {
@@ -248,6 +261,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                     rawResponseBody = "",
                     audioDurationSec = audioDurationSec,
                     audioSizeBytes = audioSize,
+                    screenshotBase64 = screenshot ?: "",
                 )
                 // Cache for retry
                 cachedAudio = audioBytes
@@ -288,6 +302,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         rawResponseBody: String,
         audioDurationSec: Float,
         audioSizeBytes: Long,
+        screenshotBase64: String = "",
     ) {
         try {
             val record = TranscriptionRecord(
@@ -302,6 +317,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                 rawResponseBody = rawResponseBody,
                 audioDurationSec = audioDurationSec,
                 audioSizeBytes = audioSizeBytes,
+                screenshotBase64 = screenshotBase64,
             )
             service.lifecycleScope.launch(Dispatchers.IO) {
                 TranscriptionHistoryManager.insert(record)

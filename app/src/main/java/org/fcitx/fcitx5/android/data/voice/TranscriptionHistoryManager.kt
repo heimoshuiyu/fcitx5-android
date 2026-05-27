@@ -6,6 +6,8 @@ package org.fcitx.fcitx5.android.data.voice
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,9 +22,16 @@ object TranscriptionHistoryManager : CoroutineScope by CoroutineScope(Supervisor
     private lateinit var db: TranscriptionDatabase
     private lateinit var dao: TranscriptionDao
 
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE transcription_record ADD COLUMN screenshotBase64 TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
     fun init(context: Context) {
         db = Room
             .databaseBuilder(context, TranscriptionDatabase::class.java, "transcription_db")
+            .addMigrations(MIGRATION_1_2)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
         dao = db.transcriptionDao()

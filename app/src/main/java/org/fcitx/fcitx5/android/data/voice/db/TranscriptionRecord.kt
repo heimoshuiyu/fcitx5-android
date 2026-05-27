@@ -62,6 +62,10 @@ data class TranscriptionRecord(
     /** Audio size in bytes */
     @ColumnInfo(defaultValue = "0")
     val audioSizeBytes: Long = 0,
+
+    /** Screenshot as data URI (e.g. "data:image/jpeg;base64,..."), empty if none */
+    @ColumnInfo(defaultValue = "")
+    val screenshotBase64: String = "",
 ) {
     companion object {
         const val TABLE_NAME = "transcription_record"

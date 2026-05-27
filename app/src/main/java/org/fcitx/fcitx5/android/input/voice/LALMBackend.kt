@@ -54,7 +54,8 @@ class LALMBackend(
         audioBytes: ByteArray,
         mime: String,
         prompt: String?,
-        selectedText: String?
+        selectedText: String?,
+        imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runCatching {
             val url = getUrl()
@@ -103,13 +104,29 @@ class LALMBackend(
                 sys to user
             }
 
-            val userContent = JsonArray(listOf(
-                JsonObject(mapOf(
-                    "type" to JsonPrimitive("text"),
-                    "text" to JsonPrimitive(userText)
-                )),
-                audioPart
-            ))
+            val userContentParts = mutableListOf<JsonObject>()
+
+            // Add text instruction
+            userContentParts.add(JsonObject(mapOf(
+                "type" to JsonPrimitive("text"),
+                "text" to JsonPrimitive(userText)
+            )))
+
+            // Add screenshot if available
+            if (!imageBase64.isNullOrEmpty()) {
+                Timber.d("[$name] Including screenshot in request")
+                userContentParts.add(JsonObject(mapOf(
+                    "type" to JsonPrimitive("image_url"),
+                    "image_url" to JsonObject(mapOf(
+                        "url" to JsonPrimitive(imageBase64)
+                    ))
+                )))
+            }
+
+            // Add audio
+            userContentParts.add(audioPart)
+
+            val userContent = JsonArray(userContentParts.toList())
 
             // Build full request as JsonObject for precise control
             val requestFields = mutableMapOf<String, kotlinx.serialization.json.JsonElement>(

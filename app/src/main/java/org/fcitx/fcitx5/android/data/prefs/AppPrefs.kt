@@ -495,6 +495,14 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val oauthCodeVerifier = ManagedPreference.PString(sharedPreferences, "voice_input_oauth_code_verifier", "").apply { register() }
         val oauthState = ManagedPreference.PString(sharedPreferences, "voice_input_oauth_state", "").apply { register() }
 
+        // Screenshot context
+        val screenScreenshot = switch(
+            R.string.voice_input_screen_screenshot,
+            "voice_input_screen_screenshot",
+            false,
+            R.string.voice_input_screen_screenshot_summary
+        )
+
         override fun createUi(screen: androidx.preference.PreferenceScreen) {
             val ctx = screen.context
 

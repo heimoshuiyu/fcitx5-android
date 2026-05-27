@@ -386,4 +386,6 @@
     <string name="screen_text_enabled_summary">正在读取屏幕文本以提升语音识别准确度。</string>
     <string name="screen_text_not_enabled">屏幕文本服务：未启用</string>
     <string name="screen_text_not_enabled_summary">启用无障碍服务以读取屏幕文本作为语音识别上下文。需要在系统设置 > 无障碍中单独授权。</string>
+    <string name="voice_input_screen_screenshot">发送截图给模型</string>
+    <string name="voice_input_screen_screenshot_summary">截取屏幕并发送给语音识别模型作为视觉上下文。需要启用屏幕文本无障碍服务。会增加流量消耗。</string>
 </resources>

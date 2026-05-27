@@ -387,4 +387,6 @@
     <string name="screen_text_enabled_summary">On-screen text is being read to improve voice transcription accuracy.</string>
     <string name="screen_text_not_enabled">Screen text service: Not enabled</string>
     <string name="screen_text_not_enabled_summary">Enable the accessibility service to read on-screen text as voice transcription context. This requires a separate permission grant in system Settings > Accessibility.</string>
+    <string name="voice_input_screen_screenshot">Send screenshot to model</string>
+    <string name="voice_input_screen_screenshot_summary">Capture a screenshot and send it to the voice recognition model as visual context. Requires the screen text accessibility service to be enabled. Increases data usage.</string>
 </resources>
