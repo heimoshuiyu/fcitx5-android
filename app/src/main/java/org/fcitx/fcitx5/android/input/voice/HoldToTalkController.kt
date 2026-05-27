@@ -78,6 +78,15 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
             VoiceBackendType.Subscription -> SubscriptionBackend(
                 getGatewayUrl = { prefs.subscriptionGatewayUrl.getValue() },
                 getAccessToken = { prefs.subscriptionAccessToken.getValue() },
+                getRefreshToken = { prefs.subscriptionRefreshToken.getValue() },
+                onTokensUpdated = { access, refresh ->
+                    prefs.subscriptionAccessToken.setValue(access)
+                    prefs.subscriptionRefreshToken.setValue(refresh)
+                },
+                onSessionExpired = {
+                    prefs.subscriptionAccessToken.setValue("")
+                    prefs.subscriptionRefreshToken.setValue("")
+                },
             )
         }
     }
