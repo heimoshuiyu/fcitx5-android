@@ -120,7 +120,7 @@ class SubscriptionBackend(
         mime: String,
         prompt: String?,
         selectedText: String?,
-        @Suppress("UNUSED_PARAMETER") imageBase64: String?
+        imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runCatching {
             val gatewayUrl = getGatewayUrl()
@@ -155,6 +155,7 @@ class SubscriptionBackend(
                 mime = mime,
                 prompt = requestPrompt,
                 instruction = instruction,
+                images = if (!imageBase64.isNullOrEmpty()) listOf(imageBase64) else null,
             )
 
             val requestBody = json.encodeToString(request)
@@ -243,6 +244,7 @@ data class SubscriptionTranscribeRequest(
     val mime: String,
     val prompt: String? = null,
     val instruction: String? = null,
+    val images: List<String>? = null,
 )
 
 @kotlinx.serialization.Serializable

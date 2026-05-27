@@ -50,7 +50,7 @@ class OpenCodeBackend(
         mime: String,
         prompt: String?,
         selectedText: String?,
-        @Suppress("UNUSED_PARAMETER") imageBase64: String?
+        imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runCatching {
             val serverUrl = getServerUrl()
@@ -98,6 +98,7 @@ class OpenCodeBackend(
                 mime = mime,
                 prompt = requestPrompt,
                 voice = voice,
+                images = if (!imageBase64.isNullOrEmpty()) listOf(imageBase64) else null,
             )
 
             val requestBody = json.encodeToString(request)
@@ -155,6 +156,7 @@ data class TranscribeRequest(
     @kotlinx.serialization.SerialName("sessionID")
     val sessionID: String? = null,
     val voice: VoiceOverride? = null,
+    val images: List<String>? = null,
 )
 
 @kotlinx.serialization.Serializable
