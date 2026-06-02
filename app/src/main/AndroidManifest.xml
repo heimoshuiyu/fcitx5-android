@@ -132,6 +132,11 @@
         </activity>
 
         <activity
+            android:name=".input.voice.MicrophonePermissionActivity"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false" />
+        <activity
             android:name=".ui.main.ClipboardEditActivity"
             android:autoRemoveFromRecents="true"
             android:directBootAware="true"

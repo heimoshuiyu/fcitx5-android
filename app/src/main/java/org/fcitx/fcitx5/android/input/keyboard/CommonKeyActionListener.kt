@@ -39,9 +39,9 @@ import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.voice.FloatingVoiceIndicator
 import org.fcitx.fcitx5.android.input.voice.HoldToTalkController
+import org.fcitx.fcitx5.android.input.voice.MicrophonePermissionActivity
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.utils.switchToNextIME
-import org.fcitx.fcitx5.android.utils.toast
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
 import org.mechdancer.dependency.manager.ManagedHandler
@@ -255,7 +255,10 @@ class CommonKeyActionListener :
                 }
             }
             HoldToTalkController.StartResult.NO_PERMISSION -> {
-                service.toast("语音输入需要麦克风权限，请在系统设置中授权")
+                val intent = android.content.Intent(service, MicrophonePermissionActivity::class.java).apply {
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                service.startActivity(intent)
             }
             HoldToTalkController.StartResult.ALREADY_ACTIVE -> {
                 // Already recording, ignore
