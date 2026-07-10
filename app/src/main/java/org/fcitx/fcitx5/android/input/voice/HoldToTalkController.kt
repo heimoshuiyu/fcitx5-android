@@ -6,8 +6,11 @@ package org.fcitx.fcitx5.android.input.voice
 
 import android.text.InputType
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -91,14 +94,14 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         }
     }
 
-    private var recordingJob: Job? = null
+    private var activeOperationJob: Job? = null
 
     enum class StartResult {
         STARTED, ALREADY_ACTIVE, NO_PERMISSION
     }
 
     fun startRecording(): StartResult {
-        if (recordingJob != null && recordingJob?.isActive == true) {
+        if (activeOperationJob?.isActive == true) {
             Timber.w("HoldToTalk already active")
             return StartResult.ALREADY_ACTIVE
         }
@@ -122,7 +125,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
             ScreenTextProvider.updateScreenshot(null)
         }
 
-        recordingJob = service.lifecycleScope.launch {
+        activeOperationJob = service.lifecycleScope.launch {
             try {
                 val wavBytes = audioRecorder.recordUntil()
                 if (wavBytes.isNotEmpty()) {
@@ -130,9 +133,9 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                 } else {
                     _state.value = State.IDLE
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 Timber.d("HoldToTalk recording cancelled")
-                _state.value = State.IDLE
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "HoldToTalk recording error")
                 _state.value = State.IDLE
@@ -146,8 +149,8 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
     }
 
     fun cancel() {
-        recordingJob?.cancel()
-        recordingJob = null
+        activeOperationJob?.cancel()
+        activeOperationJob = null
         audioRecorder.stopRecording()
         cachedAudio = null
         _state.value = State.IDLE
@@ -159,8 +162,14 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
      */
     fun retry(): Boolean {
         val audio = cachedAudio ?: return false
-        service.lifecycleScope.launch {
-            transcribeAudio(audio)
+        if (activeOperationJob?.isActive == true) return false
+        activeOperationJob = service.lifecycleScope.launch {
+            try {
+                transcribeAudio(audio)
+            } catch (e: CancellationException) {
+                Timber.d("HoldToTalk retry cancelled")
+                throw e
+            }
         }
         return true
     }
@@ -173,8 +182,8 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
 
     /** Cancel an in-progress transcription */
     fun cancelTranscription() {
-        recordingJob?.cancel()
-        recordingJob = null
+        activeOperationJob?.cancel()
+        activeOperationJob = null
         cachedAudio = null
         _state.value = State.IDLE
         Timber.d("Transcription cancelled by user")
@@ -207,6 +216,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
             } else null
             Timber.d("screenshot: ${if (screenshot != null) "${screenshot.length} chars" else "null"}")
             val result = backend.transcribe(audioBytes, "audio/wav", prompt, selectedText, screenshot)
+            currentCoroutineContext().ensureActive()
             val durationMs = System.currentTimeMillis() - startTime
 
             result.onSuccess { transcriptionResult ->
@@ -268,6 +278,9 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                 _state.value = State.RETRY_AVAILABLE
                 listener?.onError(error.message ?: "Transcription failed")
             }
+        } catch (e: CancellationException) {
+            Timber.d("Transcription cancelled")
+            throw e
         } catch (e: Exception) {
             val durationMs = System.currentTimeMillis() - startTime
             Timber.e(e, "Transcription error")
@@ -632,6 +645,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
     }
 
     fun destroy() {
+        listener = null
         cancel()
     }
 

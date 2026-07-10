@@ -16,6 +16,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.coroutines.executeAsync
 import java.util.concurrent.TimeUnit
 import timber.log.Timber
 
@@ -52,7 +53,7 @@ class OpenCodeBackend(
         selectedText: String?,
         imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
-        runCatching {
+        runTranscriptionCatching {
             val serverUrl = getServerUrl()
                 ?: throw TranscriptionException("Server URL not configured")
 
@@ -116,26 +117,28 @@ class OpenCodeBackend(
                 }
                 .build()
 
-            val response = httpClient.newCall(httpRequest).execute()
-
-            if (!response.isSuccessful) {
-                val errorBody = response.body?.string()
-                val errorMessage = try {
-                    val error = json.decodeFromString<TranscribeError>(errorBody ?: "")
-                    error.data?.message ?: "Server error: ${response.code}"
-                } catch (_: Exception) {
-                    "Server error: ${response.code} - ${errorBody?.take(200)}"
+            httpClient.newCall(httpRequest).executeAsync().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body.string()
+                    val errorMessage = try {
+                        val error = json.decodeFromString<TranscribeError>(errorBody)
+                        error.data?.message ?: "Server error: ${response.code}"
+                    } catch (_: Exception) {
+                        "Server error: ${response.code} - ${errorBody.take(200)}"
+                    }
+                    throw TranscriptionException(errorMessage)
                 }
-                throw TranscriptionException(errorMessage)
+
+                val responseBody = response.body.string()
+                if (responseBody.isEmpty()) {
+                    throw TranscriptionException("Empty response from server")
+                }
+
+                Timber.d("[$name] Response body: $responseBody")
+
+                val result = json.decodeFromString<TranscribeResponse>(responseBody)
+                TranscriptionResult(text = result.text, rawResponseBody = responseBody)
             }
-
-            val responseBody = response.body?.string()
-                ?: throw TranscriptionException("Empty response from server")
-
-            Timber.d("[$name] Response body: $responseBody")
-
-            val result = json.decodeFromString<TranscribeResponse>(responseBody)
-            TranscriptionResult(text = result.text, rawResponseBody = responseBody)
         }
     }
 

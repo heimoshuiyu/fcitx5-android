@@ -4,6 +4,8 @@
  */
 package org.fcitx.fcitx5.android.input.voice
 
+import kotlinx.coroutines.CancellationException
+
 /**
  * Result of a voice transcription call.
  *
@@ -41,4 +43,14 @@ interface VoiceBackend {
 
     /** Human-readable name for error messages */
     val name: String
+}
+
+internal suspend fun <T> runTranscriptionCatching(block: suspend () -> T): Result<T> {
+    return try {
+        Result.success(block())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Result.failure(e)
+    }
 }

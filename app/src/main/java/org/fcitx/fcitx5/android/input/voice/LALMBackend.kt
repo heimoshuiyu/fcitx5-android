@@ -17,6 +17,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.coroutines.executeAsync
 import java.util.concurrent.TimeUnit
 import timber.log.Timber
 
@@ -57,7 +58,7 @@ class LALMBackend(
         selectedText: String?,
         imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
-        runCatching {
+        runTranscriptionCatching {
             val url = getUrl()
                 ?: throw TranscriptionException("LALM API URL not configured")
             val apiKey = getApiKey()
@@ -157,23 +158,25 @@ class LALMBackend(
                 .addHeader("Authorization", "Bearer $apiKey")
                 .build()
 
-            val response = httpClient.newCall(httpRequest).execute()
+            httpClient.newCall(httpRequest).executeAsync().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body.string()
+                    throw TranscriptionException(
+                        "LALM error: ${response.code} - ${errorBody.take(200)}"
+                    )
+                }
 
-            if (!response.isSuccessful) {
-                val errorBody = response.body?.string()
-                throw TranscriptionException(
-                    "LALM error: ${response.code} - ${errorBody?.take(200)}"
-                )
+                val responseBody = response.body.string()
+                if (responseBody.isEmpty()) {
+                    throw TranscriptionException("Empty response from LALM")
+                }
+
+                Timber.d("[$name] Response body: $responseBody")
+
+                val result = json.decodeFromString<ChatCompletionResponse>(responseBody)
+                val text = result.choices?.firstOrNull()?.message?.content ?: ""
+                TranscriptionResult(text = text, rawResponseBody = responseBody)
             }
-
-            val responseBody = response.body?.string()
-                ?: throw TranscriptionException("Empty response from LALM")
-
-            Timber.d("[$name] Response body: $responseBody")
-
-            val result = json.decodeFromString<ChatCompletionResponse>(responseBody)
-            val text = result.choices?.firstOrNull()?.message?.content ?: ""
-            TranscriptionResult(text = text, rawResponseBody = responseBody)
         }
     }
 

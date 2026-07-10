@@ -184,9 +184,9 @@ class MainActivity : AppCompatActivity() {
                     .build()
 
                 val response = client.newCall(request).execute()
-                val responseBody = response.body?.string()
+                val responseBody = response.body.string()
 
-                if (response.isSuccessful && responseBody != null) {
+                if (response.isSuccessful) {
                     val json = org.json.JSONObject(responseBody)
                     val accessToken = json.getString("access_token")
                     val refreshToken = json.optString("refresh_token", "")

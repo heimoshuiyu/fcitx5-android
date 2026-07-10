@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.input.voice
 
 import android.util.Base64
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -14,6 +15,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.coroutines.executeAsync
 import java.util.concurrent.TimeUnit
 import timber.log.Timber
 
@@ -56,7 +58,7 @@ class SubscriptionBackend(
      * Attempt to refresh tokens using the stored refresh_token.
      * Returns new token pair on success, null on failure.
      */
-    private fun refreshTokens(baseUrl: String): TokenRefreshResult? {
+    private suspend fun refreshTokens(baseUrl: String): TokenRefreshResult? {
         val refreshToken = getRefreshToken()
         if (refreshToken.isNullOrEmpty()) {
             Timber.w("[$name] No refresh token available, cannot refresh")
@@ -74,18 +76,22 @@ class SubscriptionBackend(
                 .post(formBody)
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                Timber.w("[$name] Token refresh failed: ${response.code}")
-                return null
-            }
+            httpClient.newCall(request).executeAsync().use { response ->
+                if (!response.isSuccessful) {
+                    Timber.w("[$name] Token refresh failed: ${response.code}")
+                    return null
+                }
 
-            val body = response.body?.string() ?: return null
-            val tokenResponse = json.decodeFromString<TokenResponse>(body)
-            TokenRefreshResult(
-                accessToken = tokenResponse.access_token,
-                refreshToken = tokenResponse.refresh_token,
-            )
+                val body = response.body.string()
+                if (body.isEmpty()) return null
+                val tokenResponse = json.decodeFromString<TokenResponse>(body)
+                TokenRefreshResult(
+                    accessToken = tokenResponse.access_token,
+                    refreshToken = tokenResponse.refresh_token,
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "[$name] Token refresh exception")
             null
@@ -122,7 +128,7 @@ class SubscriptionBackend(
         selectedText: String?,
         imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
-        runCatching {
+        runTranscriptionCatching {
             val gatewayUrl = getGatewayUrl()
                 ?: throw TranscriptionException("Subscription gateway not configured")
 
@@ -167,59 +173,72 @@ class SubscriptionBackend(
                 .addHeader("Authorization", "Bearer $token")
                 .build()
 
-            val response = httpClient.newCall(httpRequest).execute()
-
-            if (!response.isSuccessful) {
-                val errorBody = response.body?.string()
-                val (errorCode, errorMessage) = parseError(errorBody, response.code)
-
-                // Auto-refresh on invalid_token (expired access token)
-                if (errorCode == "invalid_token") {
-                    Timber.d("[$name] Access token expired, attempting refresh...")
-                    val refreshed = refreshTokens(baseUrl)
-                    if (refreshed != null) {
-                        Timber.d("[$name] Token refreshed successfully, retrying request...")
-                        // Persist new tokens
-                        onTokensUpdated(refreshed.accessToken, refreshed.refreshToken)
-
-                        // Retry the original request with new access token
-                        val retryRequest = Request.Builder()
-                            .url("$baseUrl/voice/transcribe")
-                            .post(requestBody)
-                            .addHeader("Authorization", "Bearer ${refreshed.accessToken}")
-                            .build()
-
-                        val retryResponse = httpClient.newCall(retryRequest).execute()
-                        if (retryResponse.isSuccessful) {
-                            val retryBody = retryResponse.body?.string()
-                                ?: throw TranscriptionException("Empty response from server")
-                            Timber.d("[$name] Retry response body: $retryBody")
-                            val result = json.decodeFromString<TranscribeResponse>(retryBody)
-                            return@runCatching TranscriptionResult(text = result.text, rawResponseBody = retryBody)
-                        } else {
-                            // Retry also failed — parse and throw that error
-                            val retryErrorBody = retryResponse.body?.string()
-                            val (_, retryErrorMessage) = parseError(retryErrorBody, retryResponse.code)
-                            throw TranscriptionException(retryErrorMessage)
+            val (errorCode, errorMessage) = httpClient
+                .newCall(httpRequest)
+                .executeAsync()
+                .use { response ->
+                    if (response.isSuccessful) {
+                        val responseBody = response.body.string()
+                        if (responseBody.isEmpty()) {
+                            throw TranscriptionException("Empty response from server")
                         }
-                    } else {
-                        // Refresh failed — session truly expired, clear tokens
-                        Timber.w("[$name] Token refresh failed, session expired")
-                        onSessionExpired()
-                        throw TranscriptionException(errorMessage)
+
+                        Timber.d("[$name] Response body: $responseBody")
+
+                        val result = json.decodeFromString<TranscribeResponse>(responseBody)
+                        return@runTranscriptionCatching TranscriptionResult(
+                            text = result.text,
+                            rawResponseBody = responseBody,
+                        )
                     }
+
+                    parseError(response.body.string(), response.code)
                 }
 
-                throw TranscriptionException(errorMessage)
+            // Auto-refresh on invalid_token (expired access token)
+            if (errorCode == "invalid_token") {
+                Timber.d("[$name] Access token expired, attempting refresh...")
+                val refreshed = refreshTokens(baseUrl)
+                if (refreshed != null) {
+                    Timber.d("[$name] Token refreshed successfully, retrying request...")
+                    // Persist new tokens
+                    onTokensUpdated(refreshed.accessToken, refreshed.refreshToken)
+
+                    // Retry the original request with new access token
+                    val retryRequest = Request.Builder()
+                        .url("$baseUrl/voice/transcribe")
+                        .post(requestBody)
+                        .addHeader("Authorization", "Bearer ${refreshed.accessToken}")
+                        .build()
+
+                    return@runTranscriptionCatching httpClient
+                        .newCall(retryRequest)
+                        .executeAsync()
+                        .use { retryResponse ->
+                            if (!retryResponse.isSuccessful) {
+                                val (_, retryErrorMessage) = parseError(
+                                    retryResponse.body.string(),
+                                    retryResponse.code,
+                                )
+                                throw TranscriptionException(retryErrorMessage)
+                            }
+
+                            val retryBody = retryResponse.body.string()
+                            if (retryBody.isEmpty()) {
+                                throw TranscriptionException("Empty response from server")
+                            }
+                            Timber.d("[$name] Retry response body: $retryBody")
+                            val result = json.decodeFromString<TranscribeResponse>(retryBody)
+                            TranscriptionResult(text = result.text, rawResponseBody = retryBody)
+                        }
+                }
+
+                // Refresh failed — session truly expired, clear tokens
+                Timber.w("[$name] Token refresh failed, session expired")
+                onSessionExpired()
             }
 
-            val responseBody = response.body?.string()
-                ?: throw TranscriptionException("Empty response from server")
-
-            Timber.d("[$name] Response body: $responseBody")
-
-            val result = json.decodeFromString<TranscribeResponse>(responseBody)
-            TranscriptionResult(text = result.text, rawResponseBody = responseBody)
+            throw TranscriptionException(errorMessage)
         }
     }
 }

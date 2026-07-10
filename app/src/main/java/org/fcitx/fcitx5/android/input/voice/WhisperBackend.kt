@@ -13,6 +13,7 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.coroutines.executeAsync
 import java.util.concurrent.TimeUnit
 import timber.log.Timber
 
@@ -46,7 +47,7 @@ class WhisperBackend(
         selectedText: String?,
         @Suppress("UNUSED_PARAMETER") imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
-        runCatching {
+        runTranscriptionCatching {
             val url = getUrl()
                 ?: throw TranscriptionException("Whisper API URL not configured")
             val apiKey = getApiKey()
@@ -75,25 +76,27 @@ class WhisperBackend(
                 .addHeader("Authorization", "Bearer $apiKey")
                 .build()
 
-            val response = httpClient.newCall(httpRequest).execute()
+            httpClient.newCall(httpRequest).executeAsync().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body.string()
+                    throw TranscriptionException(
+                        "Whisper error: ${response.code} - ${errorBody.take(200)}"
+                    )
+                }
 
-            if (!response.isSuccessful) {
-                val errorBody = response.body?.string()
-                throw TranscriptionException(
-                    "Whisper error: ${response.code} - ${errorBody?.take(200)}"
+                val responseBody = response.body.string()
+                if (responseBody.isEmpty()) {
+                    throw TranscriptionException("Empty response from Whisper")
+                }
+
+                Timber.d("[$name] Response body: $responseBody")
+
+                val result = json.decodeFromString<WhisperResponse>(responseBody)
+                TranscriptionResult(
+                    text = result.text ?: "",
+                    rawResponseBody = responseBody,
                 )
             }
-
-            val responseBody = response.body?.string()
-                ?: throw TranscriptionException("Empty response from Whisper")
-
-            Timber.d("[$name] Response body: $responseBody")
-
-            val result = json.decodeFromString<WhisperResponse>(responseBody)
-            TranscriptionResult(
-                text = result.text ?: "",
-                rawResponseBody = responseBody,
-            )
         }
     }
 }

@@ -9,12 +9,14 @@ test = "1.7.0"
 splitties = "3.0.0"
 aboutlibraries = "14.0.1"
 arrow = "2.2.2.1"
+okhttp = "5.3.2"
 
 [libraries]
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "androidGradlePlugin" }
 android-desugarJDKLibs = { group = "com.android.tools", name = "desugar_jdk_libs", version = "2.1.5" }
 kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version = "1.10.2" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version = "1.10.2" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.11.0" }
 androidx-activity = { module = "androidx.activity:activity-ktx", version = "1.13.0" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.1" }
@@ -45,7 +47,9 @@ imagecropper = { module = "com.vanniktech:android-image-cropper", version = "4.7
 flexbox = { module = "com.google.android.flexbox:flexbox", version = "3.0.0" }
 dependency = { module = "org.mechdancer:dependency", version = "0.1.2" }
 timber = { module = "com.jakewharton.timber:timber", version = "5.0.1" }
-okhttp = { module = "com.squareup.okhttp3:okhttp", version = "4.12.0" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okhttp-coroutines = { module = "com.squareup.okhttp3:okhttp-coroutines", version.ref = "okhttp" }
+okhttp-mockwebserver = { module = "com.squareup.okhttp3:mockwebserver3", version.ref = "okhttp" }
 splitties-bitflags = { module = "com.louiscad.splitties:splitties-bitflags", version.ref = "splitties" }
 splitties-dimensions = { module = "com.louiscad.splitties:splitties-dimensions", version.ref = "splitties" }
 splitties-resources = { module = "com.louiscad.splitties:splitties-resources", version.ref = "splitties" }
