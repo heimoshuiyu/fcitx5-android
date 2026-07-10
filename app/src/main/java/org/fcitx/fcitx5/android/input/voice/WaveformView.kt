@@ -4,186 +4,191 @@
  */
 package org.fcitx.fcitx5.android.input.voice
 
-import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.os.SystemClock
 import android.view.View
-import androidx.interpolator.view.animation.FastOutSlowInInterpolator
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
+import androidx.core.graphics.ColorUtils
+import kotlin.math.exp
+import kotlin.math.log10
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
- * A custom View that displays real-time audio waveform bars.
+ * Displays a rolling time window of microphone levels.
  *
- * Displays a row of rounded bars whose heights respond to the microphone amplitude.
- * When idle, bars show a gentle breathing animation.
- * When recording, bars jump to reflect the actual audio level with smooth decay.
- *
- * Inspired by Siri / WeChat voice input waveform visualizers.
+ * New samples enter from the right and move continuously toward the left. Audio updates only
+ * replace the latest RMS value; sampling and drawing run on a stable visual clock so devices with
+ * different AudioRecord buffer sizes produce the same animation speed.
  */
 class WaveformView(context: Context) : View(context) {
 
     companion object {
-        private const val BAR_COUNT = 28
-        private const val MIN_BAR_HEIGHT_RATIO = 0.08f
-        private const val MAX_BAR_HEIGHT_RATIO = 0.85f
-        private const val BAR_RADIUS_RATIO = 0.5f // fully rounded ends
-        private const val DECAY_SPEED = 0.25f // per frame, how fast bars fall
-        private const val RISE_SPEED = 0.55f // per frame, how fast bars rise
-        private const val IDLE_BREATH_AMP = 0.12f // amplitude of idle breathing
+        private const val WINDOW_DURATION_MS = 3_000f
+        private const val TARGET_BAR_STEP_DP = 6f
+        private const val MIN_BAR_COUNT = 48
+        private const val MAX_BAR_COUNT = 120
+        private const val MIN_LEVEL_DB = -60f
+        private const val MAX_LEVEL_DB = -12f
+        private const val ATTACK_DURATION_MS = 45f
+        private const val RELEASE_DURATION_MS = 180f
+        private const val MAX_FRAME_DELTA_MS = 250f
     }
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
+    private val barRect = RectF()
 
-    /** Current normalized height of each bar [0, 1] */
-    private val barHeights = FloatArray(BAR_COUNT) { MIN_BAR_HEIGHT_RATIO }
+    private var history = FloatArray(MIN_BAR_COUNT)
+    private var writeIndex = 0
+    private var sampleIntervalMs = WINDOW_DURATION_MS / MIN_BAR_COUNT
+    private var sampleElapsedMs = 0f
+    private var lastFrameTimeMs = 0L
 
-    /** Target height for each bar (set by amplitude) */
-    private val barTargets = FloatArray(BAR_COUNT) { MIN_BAR_HEIGHT_RATIO }
-
-    private var barColor: Int = 0xFF4CAF50.toInt() // default green, overridden by theme
-    private var barGap: Float = 0f
-    private var barWidth: Float = 0f
-    private var idleTime: Float = 0f
+    private var latestAmplitude = 0f
+    private var smoothedLevel = 0f
     private var isRecording = false
-    private var isAttached = false
 
-    private var breathAnimator: ValueAnimator? = null
+    private var historyColor = 0x994CAF50.toInt()
+    private var liveColor = 0xFF4CAF50.toInt()
 
-    fun setBarColor(color: Int) {
-        barColor = color
-        barPaint.color = color
+    fun setBarColors(historyColor: Int, liveColor: Int) {
+        this.historyColor = historyColor
+        this.liveColor = liveColor
         invalidate()
     }
 
-    /**
-     * Called on every amplitude update from AudioRecorder.
-     * @param amplitude normalized [0, 1]
-     */
+    /** Updates the latest normalized RMS value from AudioRecorder. */
     fun setAmplitude(amplitude: Float) {
         if (!isRecording) return
-        // Amplify and apply nonlinear curve so quiet speech is also visible.
-        // Raw RMS from 16-bit PCM is typically 0.01–0.15 for normal speech;
-        // multiplying by 6 then taking pow(0.5) maps it to 0.25–0.95.
-        val a = ((amplitude * 39f).coerceIn(0f, 1f)).let { sqrt(it) }
-
-        for (i in 0 until BAR_COUNT) {
-            val center = (BAR_COUNT - 1) / 2f
-            val dist = (i - center) / center // [-1, 1]
-            val bellFactor = 1f - dist * dist * 0.4f
-            val variation = 0.7f + 0.3f * ((i * 7 + 3) % BAR_COUNT) / BAR_COUNT.toFloat()
-            val target = MIN_BAR_HEIGHT_RATIO + (MAX_BAR_HEIGHT_RATIO - MIN_BAR_HEIGHT_RATIO) * a * bellFactor * variation
-            barTargets[i] = target.coerceIn(MIN_BAR_HEIGHT_RATIO, MAX_BAR_HEIGHT_RATIO)
-        }
-        invalidate()
+        latestAmplitude = amplitude.coerceIn(0f, 1f)
     }
 
     fun setRecording(recording: Boolean) {
+        if (isRecording == recording) return
         isRecording = recording
+        latestAmplitude = 0f
+        smoothedLevel = 0f
+        sampleElapsedMs = 0f
+        lastFrameTimeMs = SystemClock.uptimeMillis()
+        writeIndex = 0
+        history.fill(0f)
         if (recording) {
-            breathAnimator?.cancel()
-            // Reset bars to minimum
-            for (i in 0 until BAR_COUNT) {
-                barTargets[i] = MIN_BAR_HEIGHT_RATIO
-            }
-            invalidate() // kick off the redraw loop
+            postInvalidateOnAnimation()
         } else {
-            // Smoothly return to idle
-            for (i in 0 until BAR_COUNT) {
-                barTargets[i] = MIN_BAR_HEIGHT_RATIO
-            }
-            startIdleAnimation()
+            invalidate()
         }
     }
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        isAttached = true
-        if (!isRecording) {
-            startIdleAnimation()
+    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight)
+        val contentWidth = (width - paddingLeft - paddingRight).coerceAtLeast(0)
+        val barCount = (contentWidth / TARGET_BAR_STEP_DP.dp)
+            .roundToInt()
+            .coerceIn(MIN_BAR_COUNT, MAX_BAR_COUNT)
+        if (barCount != history.size) {
+            history = FloatArray(barCount)
+            writeIndex = 0
         }
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        isAttached = false
-        breathAnimator?.cancel()
-    }
-
-    private fun startIdleAnimation() {
-        if (!isAttached) return
-        breathAnimator?.cancel()
-        breathAnimator = ValueAnimator.ofFloat(0f, Float.MAX_VALUE).apply {
-            duration = 100_000 // long running
-            interpolator = null // linear for custom calculation
-            addUpdateListener {
-                idleTime = it.animatedFraction * it.duration / 1000f
-                updateIdleBars()
-                invalidate()
-            }
-            start()
-        }
-    }
-
-    private fun updateIdleBars() {
-        val t = idleTime
-        for (i in 0 until BAR_COUNT) {
-            // Each bar oscillates with a phase offset for a wave effect
-            val phase = i * 0.4f
-            val wave = sin((t * 2.5f + phase).toDouble()).toFloat()
-            val target = MIN_BAR_HEIGHT_RATIO + IDLE_BREATH_AMP * (0.5f + 0.5f * wave)
-            barTargets[i] = target
-        }
-    }
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        val totalGapSpace = (BAR_COUNT - 1) * 3.dp.toFloat()
-        barGap = 3.dp.toFloat()
-        barWidth = (w - totalGapSpace) / BAR_COUNT.toFloat()
+        sampleIntervalMs = WINDOW_DURATION_MS / barCount
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // Smoothly interpolate current heights toward targets
-        for (i in 0 until BAR_COUNT) {
-            val diff = barTargets[i] - barHeights[i]
-            val speed = if (diff > 0) RISE_SPEED else DECAY_SPEED
-            barHeights[i] += diff * speed
+        val scrollProgress = if (isRecording) updateLevels() else 0f
+        val left = paddingLeft.toFloat()
+        val right = (width - paddingRight).toFloat()
+        val contentWidth = right - left
+        if (contentWidth <= 0f || history.size < 2) return
+
+        val step = contentWidth / (history.size - 1)
+        val barWidth = min(4f.dp, step * 0.58f).coerceAtLeast(2f.dp)
+        val halfBarWidth = barWidth / 2f
+
+        for (position in history.indices) {
+            val centerX = left + position * step - scrollProgress * step
+            if (centerX + halfBarWidth < left || centerX - halfBarWidth > right) {
+                continue
+            }
+            val sampleIndex = (writeIndex + position) % history.size
+            val freshness = position.toFloat() / (history.size - 1)
+            val color = ColorUtils.blendARGB(historyColor, liveColor, freshness * freshness)
+            val alpha = (0.3f + 0.7f * freshness) * (0.7f + 0.3f * history[sampleIndex])
+            drawBar(canvas, centerX, barWidth, history[sampleIndex], color, alpha)
         }
 
-        val h = height.toFloat()
-        val w = width.toFloat()
-        val rect = RectF()
-
-        for (i in 0 until BAR_COUNT) {
-            val barH = barHeights[i] * h
-            val left = i * (barWidth + barGap)
-            val top = (h - barH) / 2f
-            val radius = (barWidth / 2f) * BAR_RADIUS_RATIO
-
-            rect.set(left, top, left + barWidth, top + barH)
-
-            // Slightly vary alpha per bar for depth
-            val alpha = 0.6f + 0.4f * barHeights[i]
-            barPaint.color = barColor
-            barPaint.alpha = (alpha * 255).toInt()
-
-            canvas.drawRoundRect(rect, radius, radius, barPaint)
+        val liveCenterX = right + (1f - scrollProgress) * step
+        if (liveCenterX - halfBarWidth <= right) {
+            drawBar(canvas, liveCenterX, barWidth, smoothedLevel, liveColor, 1f)
         }
 
         if (isRecording) {
-            // Keep animating during recording
-            invalidate()
+            postInvalidateOnAnimation()
         }
     }
 
-    private val Int.dp: Int
-        get() = (this * resources.displayMetrics.density).toInt()
+    private fun updateLevels(): Float {
+        val now = SystemClock.uptimeMillis()
+        val deltaMs = (now - lastFrameTimeMs).toFloat().coerceIn(0f, MAX_FRAME_DELTA_MS)
+        lastFrameTimeMs = now
+
+        val targetLevel = normalizeAmplitude(latestAmplitude)
+        val responseDuration = if (targetLevel > smoothedLevel) {
+            ATTACK_DURATION_MS
+        } else {
+            RELEASE_DURATION_MS
+        }
+        val response = 1f - exp((-deltaMs / responseDuration).toDouble()).toFloat()
+        smoothedLevel += (targetLevel - smoothedLevel) * response
+
+        sampleElapsedMs += deltaMs
+        while (sampleElapsedMs >= sampleIntervalMs) {
+            history[writeIndex] = smoothedLevel
+            writeIndex = (writeIndex + 1) % history.size
+            sampleElapsedMs -= sampleIntervalMs
+        }
+        return (sampleElapsedMs / sampleIntervalMs).coerceIn(0f, 1f)
+    }
+
+    private fun normalizeAmplitude(amplitude: Float): Float {
+        if (amplitude <= 0f) return 0f
+        val decibels = 20f * log10(amplitude.toDouble()).toFloat()
+        val normalized = ((decibels - MIN_LEVEL_DB) / (MAX_LEVEL_DB - MIN_LEVEL_DB))
+            .coerceIn(0f, 1f)
+        return normalized
+    }
+
+    private fun drawBar(
+        canvas: Canvas,
+        centerX: Float,
+        barWidth: Float,
+        level: Float,
+        color: Int,
+        alpha: Float,
+    ) {
+        val contentHeight = (height - paddingTop - paddingBottom).toFloat().coerceAtLeast(0f)
+        val minHeight = 4f.dp
+        val maxHeight = (contentHeight * 0.88f).coerceAtLeast(minHeight)
+        val barHeight = minHeight + (maxHeight - minHeight) * level
+        val centerY = paddingTop + contentHeight / 2f
+        val halfWidth = barWidth / 2f
+        val halfHeight = barHeight / 2f
+
+        barPaint.color = color
+        barPaint.alpha = (alpha.coerceIn(0f, 1f) * 255).roundToInt()
+        barRect.set(
+            centerX - halfWidth,
+            centerY - halfHeight,
+            centerX + halfWidth,
+            centerY + halfHeight,
+        )
+        canvas.drawRoundRect(barRect, halfWidth, halfWidth, barPaint)
+    }
+
+    private val Float.dp: Float
+        get() = this * resources.displayMetrics.density
 }

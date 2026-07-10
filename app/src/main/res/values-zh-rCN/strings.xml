@@ -350,6 +350,7 @@
     <string name="accessibility_service_description">读取屏幕上可见的文字，为语音转文字提供更丰富的上下文。不会自动收集或发送任何数据——文字仅在您触发语音输入时本地用作提示词上下文。</string>
     <string name="accessibility_service_summary">为语音转写提供屏幕文字上下文</string>
     <string name="voice_input_listening">正在聆听…</string>
+    <string name="voice_input_release_to_transcribe">松开空格键开始转录</string>
     <string name="voice_input_transcribing">正在转录…</string>
     <string name="voice_input_error">转录失败</string>
     <string name="voice_input_empty">未检测到语音</string>

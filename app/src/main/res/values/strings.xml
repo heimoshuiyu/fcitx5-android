@@ -351,6 +351,7 @@
     <string name="accessibility_service_description">Reads visible on-screen text to provide richer context for voice transcription. No data is collected or sent anywhere automatically — text is only used locally as prompt context when you trigger voice input.</string>
     <string name="accessibility_service_summary">Provides on-screen text as context for voice transcription</string>
     <string name="voice_input_listening">Listening…</string>
+    <string name="voice_input_release_to_transcribe">Release the space key to transcribe</string>
     <string name="voice_input_transcribing">Transcribing…</string>
     <string name="voice_input_error">Transcription failed</string>
     <string name="voice_input_empty">No speech detected</string>

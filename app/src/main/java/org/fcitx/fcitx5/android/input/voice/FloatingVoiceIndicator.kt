@@ -4,234 +4,260 @@
  */
 package org.fcitx.fcitx5.android.input.voice
 
+import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.theme.Theme
 import splitties.dimensions.dp
 
-/**
- * A lightweight floating indicator that overlays on top of the keyboard.
- *
- * States:
- * - RECORDING: waveform visualization + "Listening..."
- * - TRANSCRIBING: spinner + "Transcribing..."
- * - RETRY_AVAILABLE: error message + [Retry] [Cancel] buttons
- * - HIDDEN: not visible
- */
+/** A full-keyboard voice input surface for recording, transcription, and retry states. */
 class FloatingVoiceIndicator(
     private val context: android.content.Context,
-    private val theme: Theme
+    private val theme: Theme,
 ) {
 
     enum class State {
         RECORDING,
         TRANSCRIBING,
         RETRY_AVAILABLE,
-        HIDDEN
+        HIDDEN,
     }
 
-    private var state: State = State.HIDDEN
+    private var state = State.HIDDEN
+    private val disableAnimation = AppPrefs.getInstance().advanced.disableAnimation.getValue()
 
     var onRetryClicked: (() -> Unit)? = null
     var onCancelClicked: (() -> Unit)? = null
     var onCancelTranscriptionClicked: (() -> Unit)? = null
 
-    // === Recording: waveform ===
-
     val waveformView = WaveformView(context).apply {
-        setBarColor(theme.altKeyTextColor)
+        setBarColors(theme.altKeyTextColor, theme.accentKeyBackgroundColor)
+        setPadding(context.dp(4), 0, context.dp(4), 0)
         layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
             0,
-            context.dp(32)
+            1f,
         ).apply {
-            weight = 1f
+            topMargin = context.dp(6)
+            bottomMargin = context.dp(6)
         }
     }
 
-    // === Transcribing: spinner ===
-
-    private val progressBar = ProgressBar(context).apply {
-        indeterminateTintList = android.content.res.ColorStateList.valueOf(theme.altKeyTextColor)
-        visibility = View.GONE
-        val s = context.dp(24)
-        layoutParams = LinearLayout.LayoutParams(s, s).apply {
-            gravity = Gravity.CENTER
-            marginStart = context.dp(4)
-            marginEnd = context.dp(4)
-        }
-    }
-
-    // === Status text ===
-
-    private val statusLabel = TextView(context).apply {
-        setTextColor(theme.altKeyTextColor)
-        textSize = 13f
+    private val recordingLabel = TextView(context).apply {
+        text = context.getString(R.string.voice_input_listening)
+        setTextColor(theme.keyTextColor)
+        textSize = 15f
         gravity = Gravity.CENTER
         layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            marginStart = context.dp(8)
-            gravity = Gravity.CENTER_VERTICAL
-        }
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
     }
 
-    // === Retry: buttons ===
-
-    private val retryButton = Button(context).apply {
-        text = context.getString(R.string.voice_input_retry)
+    private val releaseHint = TextView(context).apply {
+        text = context.getString(R.string.voice_input_release_to_transcribe)
         setTextColor(theme.altKeyTextColor)
         textSize = 12f
-        setPadding(context.dp(12), 0, context.dp(12), 0)
-        background = GradientDrawable().apply {
-            cornerRadius = context.dp(8).toFloat()
-            setStroke(1, theme.altKeyTextColor)
-            setColor(0x00000000) // transparent
-        }
+        gravity = Gravity.CENTER
         layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            context.dp(32)
-        ).apply {
-            marginStart = context.dp(8)
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        setOnClickListener { onRetryClicked?.invoke() }
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
     }
 
-    private val cancelButton = Button(context).apply {
-        text = context.getString(R.string.voice_input_cancel)
+    private val recordingContent = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(context.dp(16), context.dp(16), context.dp(16), context.dp(12))
+        layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+        addView(recordingLabel)
+        addView(waveformView)
+        addView(releaseHint)
+    }
+
+    private val progressBar = ProgressBar(context).apply {
+        indeterminateTintList = ColorStateList.valueOf(theme.accentKeyBackgroundColor)
+        val size = context.dp(32)
+        layoutParams = LinearLayout.LayoutParams(size, size).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = context.dp(12)
+        }
+    }
+
+    private val statusLabel = TextView(context).apply {
+        setTextColor(theme.keyTextColor)
+        textSize = 15f
+        gravity = Gravity.CENTER
+        accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            bottomMargin = context.dp(16)
+        }
+    }
+
+    private fun createActionButton(textResource: Int, onClick: () -> Unit) = Button(context).apply {
+        text = context.getString(textResource)
         setTextColor(theme.altKeyTextColor)
         textSize = 12f
-        setPadding(context.dp(12), 0, context.dp(12), 0)
+        setPadding(context.dp(14), 0, context.dp(14), 0)
+        minWidth = 0
+        minimumWidth = 0
         background = GradientDrawable().apply {
-            cornerRadius = context.dp(8).toFloat()
-            setStroke(1, theme.altKeyTextColor)
+            cornerRadius = context.dp(10).toFloat()
+            setStroke(context.dp(1), theme.altKeyTextColor)
             setColor(0x00000000)
         }
         layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            context.dp(32)
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            context.dp(38),
         ).apply {
             marginStart = context.dp(4)
-            gravity = Gravity.CENTER_VERTICAL
+            marginEnd = context.dp(4)
         }
-        setOnClickListener { onCancelClicked?.invoke() }
+        setOnClickListener { onClick() }
+    }
+
+    private val retryButton = createActionButton(R.string.voice_input_retry) {
+        onRetryClicked?.invoke()
+    }
+
+    private val cancelButton = createActionButton(R.string.voice_input_cancel) {
+        onCancelClicked?.invoke()
+    }
+
+    private val cancelTranscriptionButton = createActionButton(R.string.voice_input_cancel) {
+        onCancelTranscriptionClicked?.invoke()
     }
 
     private val retryButtonGroup = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
-        visibility = View.GONE
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            marginStart = context.dp(8)
-            gravity = Gravity.CENTER_VERTICAL
-        }
+        gravity = Gravity.CENTER
         addView(retryButton)
         addView(cancelButton)
     }
 
-    // === Transcribing: cancel button ===
-
-    private val cancelTranscriptionButton = Button(context).apply {
-        text = context.getString(R.string.voice_input_cancel)
-        setTextColor(theme.altKeyTextColor)
-        textSize = 12f
-        setPadding(context.dp(12), 0, context.dp(12), 0)
-        background = GradientDrawable().apply {
-            cornerRadius = context.dp(8).toFloat()
-            setStroke(1, theme.altKeyTextColor)
-            setColor(0x00000000)
-        }
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            context.dp(32)
-        ).apply {
-            marginStart = context.dp(8)
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        visibility = View.GONE
-        setOnClickListener { onCancelTranscriptionClicked?.invoke() }
-    }
-
-    // === Container ===
-
-    private val bgDrawable = GradientDrawable().apply {
-        cornerRadius = context.dp(16).toFloat()
-        setColor(theme.backgroundColor)
-        setStroke(1, theme.altKeyTextColor)
-        alpha = 230
-    }
-
-    val view: View = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        background = bgDrawable
+    private val stateContent = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(context.dp(24), context.dp(24), context.dp(24), context.dp(24))
         layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            context.dp(48)
-        ).apply {
-            gravity = Gravity.BOTTOM
-            marginStart = context.dp(8)
-            marginEnd = context.dp(8)
-            bottomMargin = context.dp(4)
-        }
-        setPadding(context.dp(8), context.dp(4), context.dp(8), context.dp(4))
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
         addView(progressBar)
-        addView(waveformView)
         addView(statusLabel)
         addView(cancelTranscriptionButton)
         addView(retryButtonGroup)
         visibility = View.GONE
     }
 
+    private val backgroundDrawable = GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(theme.keyboardColor, theme.backgroundColor),
+    )
+
+    val view: View = FrameLayout(context).apply {
+        background = backgroundDrawable
+        isClickable = true
+        isFocusable = true
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        addView(recordingContent)
+        addView(stateContent)
+        visibility = View.GONE
+    }
+
     fun showRecording() {
         state = State.RECORDING
-        view.visibility = View.VISIBLE
-        waveformView.visibility = View.VISIBLE
+        recordingContent.visibility = View.VISIBLE
+        stateContent.visibility = View.GONE
         waveformView.setRecording(true)
-        progressBar.visibility = View.GONE
-        cancelTranscriptionButton.visibility = View.GONE
-        retryButtonGroup.visibility = View.GONE
-        statusLabel.text = context.getString(R.string.voice_input_listening)
+        showPanel()
     }
 
     fun showTranscribing() {
         state = State.TRANSCRIBING
-        waveformView.visibility = View.GONE
         waveformView.setRecording(false)
+        recordingContent.visibility = View.GONE
+        stateContent.visibility = View.VISIBLE
         progressBar.visibility = View.VISIBLE
         cancelTranscriptionButton.visibility = View.VISIBLE
         retryButtonGroup.visibility = View.GONE
         statusLabel.text = context.getString(R.string.voice_input_transcribing)
+        showPanel()
     }
 
     fun showRetry(message: String? = null) {
         state = State.RETRY_AVAILABLE
-        waveformView.visibility = View.GONE
         waveformView.setRecording(false)
+        recordingContent.visibility = View.GONE
+        stateContent.visibility = View.VISIBLE
         progressBar.visibility = View.GONE
         cancelTranscriptionButton.visibility = View.GONE
         retryButtonGroup.visibility = View.VISIBLE
         statusLabel.text = message ?: context.getString(R.string.voice_input_error)
+        showPanel()
     }
 
     fun hide() {
+        if (state == State.HIDDEN) return
         state = State.HIDDEN
         waveformView.setRecording(false)
-        progressBar.visibility = View.GONE
-        cancelTranscriptionButton.visibility = View.GONE
-        retryButtonGroup.visibility = View.GONE
-        view.visibility = View.GONE
+        view.animate().cancel()
+        if (disableAnimation || !view.isAttachedToWindow) {
+            view.visibility = View.GONE
+            resetTransform()
+            return
+        }
+        view.animate()
+            .alpha(0f)
+            .setDuration(100)
+            .withEndAction {
+                if (state == State.HIDDEN) {
+                    view.visibility = View.GONE
+                    resetTransform()
+                }
+            }
+            .start()
     }
 
     fun isShowing(): Boolean = state != State.HIDDEN
+
+    private fun showPanel() {
+        view.animate().cancel()
+        if (view.visibility == View.VISIBLE || disableAnimation) {
+            view.visibility = View.VISIBLE
+            resetTransform()
+            return
+        }
+        view.visibility = View.VISIBLE
+        view.alpha = 0f
+        view.scaleX = 0.985f
+        view.scaleY = 0.96f
+        view.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(140)
+            .start()
+    }
+
+    private fun resetTransform() {
+        view.alpha = 1f
+        view.scaleX = 1f
+        view.scaleY = 1f
+    }
 }

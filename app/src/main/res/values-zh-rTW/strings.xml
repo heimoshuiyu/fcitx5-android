@@ -345,6 +345,7 @@
     <string name="voice_input_lalm_voice_edit">語音編輯</string>
     <string name="voice_input_lalm_voice_edit_summary">選取文字時，語音輸入將作為編輯指令（如翻譯、潤飾）而非輸入新文字</string>
     <string name="voice_input_listening">正在聆聽…</string>
+    <string name="voice_input_release_to_transcribe">放開空格鍵開始轉錄</string>
     <string name="voice_input_transcribing">正在轉錄…</string>
     <string name="voice_input_error">轉錄失敗</string>
     <string name="voice_input_empty">未偵測到語音</string>

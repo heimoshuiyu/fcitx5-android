@@ -6,6 +6,7 @@
 package org.fcitx.fcitx5.android.input.keyboard
 
 import androidx.core.content.ContextCompat
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.R
@@ -16,6 +17,7 @@ import org.fcitx.fcitx5.android.input.broadcast.PreeditEmptyStateComponent
 import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateComponent
 import org.fcitx.fcitx5.android.input.dependency.context
 import org.fcitx.fcitx5.android.input.dependency.fcitx
+import org.fcitx.fcitx5.android.input.dependency.inputView
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.input.dialog.AddMoreInputMethodsPrompt
 import org.fcitx.fcitx5.android.input.dialog.InputMethodPickerDialog
@@ -47,6 +49,7 @@ import org.mechdancer.dependency.UniqueComponent
 import org.mechdancer.dependency.manager.ManagedHandler
 import org.mechdancer.dependency.manager.managedHandler
 import org.mechdancer.dependency.manager.must
+import splitties.views.dsl.constraintlayout.parentId
 
 class CommonKeyActionListener :
     UniqueComponent<CommonKeyActionListener>(), Dependent, ManagedHandler by managedHandler(),
@@ -59,6 +62,7 @@ class CommonKeyActionListener :
     private val context by manager.context()
     private val fcitx by manager.fcitx()
     private val service by manager.inputMethodService()
+    private val inputView by manager.inputView()
     private val theme by manager.theme()
     private val preeditState: PreeditEmptyStateComponent by manager.must()
     private val horizontalCandidate: HorizontalCandidateComponent by manager.must()
@@ -219,21 +223,32 @@ class CommonKeyActionListener :
             startStateObserver()
         }
         if (floatingIndicator == null) {
-            floatingIndicator = FloatingVoiceIndicator(service, theme)
-            floatingIndicator!!.onRetryClicked = {
+            val indicator = FloatingVoiceIndicator(service, theme)
+            floatingIndicator = indicator
+            indicator.onRetryClicked = {
                 holdToTalkController?.retry()
             }
-            floatingIndicator!!.onCancelClicked = {
+            indicator.onCancelClicked = {
                 holdToTalkController?.dismissRetry()
             }
-            floatingIndicator!!.onCancelTranscriptionClicked = {
+            indicator.onCancelTranscriptionClicked = {
                 holdToTalkController?.cancelTranscription()
             }
-            // Add indicator on top of the keyboard area
-            val containerView = windowManager.view
+            // Cover the complete keyboard surface, including the candidate/tool bar.
+            val containerView = inputView.keyboardView as ConstraintLayout
             containerView.post {
-                containerView.addView(floatingIndicator!!.view)
-                floatingIndicator!!.view.bringToFront()
+                if (floatingIndicator === indicator && indicator.view.parent == null) {
+                    containerView.addView(
+                        indicator.view,
+                        ConstraintLayout.LayoutParams(0, 0).apply {
+                            startToStart = parentId
+                            endToEnd = parentId
+                            topToTop = parentId
+                            bottomToBottom = parentId
+                        },
+                    )
+                    indicator.view.bringToFront()
+                }
             }
         }
 
