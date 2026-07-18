@@ -318,11 +318,23 @@
     <string name="hide_unsupported_emojis">隐藏不支持的表情</string>
     <string name="key_border_stroke">启用按键边框描边</string>
     <string name="preferred_voice_input">首选语音输入</string>
+    <string name="edit_text_playground">EditText 测试场</string>
 
     <!-- Voice Input -->
     <string name="voice_input">语音输入</string>
     <string name="voice_input_general">通用</string>
     <string name="voice_input_backend">后端</string>
+    <string name="voice_input_secret_configured">已配置</string>
+    <string name="voice_input_secret_not_configured">未配置</string>
+    <string name="voice_input_save_history">保存转录历史</string>
+    <string name="voice_input_save_history_summary">在本机保存结果和请求元数据，不保存提示词、原始响应和截图。</string>
+    <string name="voice_input_surrounding_text">发送输入框上下文</string>
+    <string name="voice_input_surrounding_text_summary">发送光标前后的文字，以及语音编辑使用的选中文字。</string>
+    <string name="voice_input_clipboard_context">发送剪贴板文字</string>
+    <string name="voice_input_clipboard_context_summary">将最近一条非敏感剪贴板内容作为转录上下文发送。</string>
+    <string name="voice_input_screen_text">发送屏幕可见文字</string>
+    <string name="voice_input_screen_text_summary">将无障碍服务读取的屏幕文字作为转录上下文发送。</string>
+    <string name="voice_input_sensitive_field">敏感输入框中已禁用语音输入</string>
     <string name="voice_backend_opencode">OpenCode</string>
     <string name="voice_backend_whisper">Whisper</string>
     <string name="voice_backend_lalm">LALM（语音大模型）</string>
@@ -347,7 +359,7 @@
     <string name="voice_input_lalm_voice_edit">语音编辑</string>
     <string name="voice_input_lalm_voice_edit_summary">当选中文字时，语音输入将作为编辑指令（如翻译、润色）而非输入新文本</string>
     <string name="accessibility_service_name">小企鹅输入法屏幕上下文</string>
-    <string name="accessibility_service_description">读取屏幕上可见的文字，为语音转文字提供更丰富的上下文。不会自动收集或发送任何数据——文字仅在您触发语音输入时本地用作提示词上下文。</string>
+    <string name="accessibility_service_description">读取屏幕上可见的文字，为语音转文字提供可选上下文。只有启用屏幕文字上下文并触发语音输入时才会发送文字。</string>
     <string name="accessibility_service_summary">为语音转写提供屏幕文字上下文</string>
     <string name="voice_input_listening">正在聆听…</string>
     <string name="voice_input_release_to_transcribe">松开空格键开始转录</string>
@@ -363,11 +375,26 @@
     <string name="voice_input_auto_hotwords_list">已学习的热词</string>
     <string name="voice_input_auto_hotwords_list_summary">根据您的修正自动学习的热词。</string>
     <string name="voice_input_history">转录历史</string>
-    <string name="voice_input_history_summary">查看历史转录记录，包括提示词、结果和原始 API 响应。</string>
+    <string name="voice_input_history_summary">查看保存在本机的转录结果和请求元数据。</string>
     <string name="transcription_history_empty">暂无转录记录</string>
     <string name="transcription_history_clear_title">清空历史</string>
     <string name="transcription_history_clear_message">确定删除所有转录记录吗？</string>
     <string name="transcription_detail_title">转录详情</string>
+    <string name="transcription_record_not_found">未找到记录</string>
+    <string name="transcription_backend_edit">%1$s（编辑）</string>
+    <string name="transcription_duration_ms">%1$d 毫秒</string>
+    <string name="transcription_audio_info">%1$d 秒 / %2$d KB</string>
+    <string name="transcription_success">成功</string>
+    <string name="transcription_failed">失败</string>
+    <string name="transcription_value_empty">（空）</string>
+    <string name="transcription_value_none">（无）</string>
+    <string name="transcription_value_not_available">（不可用）</string>
+    <string name="transcription_result">结果</string>
+    <string name="transcription_prompt">提示词</string>
+    <string name="transcription_selected_text">选中文字</string>
+    <string name="transcription_screenshot">截图</string>
+    <string name="transcription_screenshot_description">转录时截取的屏幕截图</string>
+    <string name="transcription_raw_response">原始响应</string>
     <!-- Subscription -->
     <string name="voice_backend_subscription">订阅服务</string>
     <string name="subscription_status_authorized">订阅服务：已登录</string>
@@ -380,11 +407,15 @@
     <string name="subscription_sign_out_summary">断开您的订阅账号连接。</string>
     <string name="subscription_signed_out">已退出登录</string>
     <string name="subscription_auth_success">授权成功</string>
+    <string name="subscription_auth_failed">授权失败：%1$s</string>
+    <string name="subscription_auth_invalid_state">授权失败：回调状态无效</string>
+    <string name="subscription_auth_invalid_callback">授权失败：回调信息不完整</string>
     <string name="subscription_manage_account">管理账户</string>
     <!-- Screen text context -->
     <string name="screen_text_context">屏幕文本上下文</string>
     <string name="screen_text_enabled">屏幕文本服务：已启用</string>
-    <string name="screen_text_enabled_summary">正在读取屏幕文本以提升语音识别准确度。</string>
+    <string name="screen_text_enabled_summary">服务已可用。只有单独启用屏幕文字上下文后才会发送文字。</string>
+    <string name="subscription_gateway_invalid">订阅服务地址必须使用 HTTPS</string>
     <string name="screen_text_not_enabled">屏幕文本服务：未启用</string>
     <string name="screen_text_not_enabled_summary">启用无障碍服务以读取屏幕文本作为语音识别上下文。需要在系统设置 > 无障碍中单独授权。</string>
     <string name="voice_input_screen_screenshot">发送截图给模型</string>

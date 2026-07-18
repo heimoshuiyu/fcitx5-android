@@ -4,9 +4,8 @@
  */
 package org.fcitx.fcitx5.android.input.voice
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 
 /**
@@ -16,19 +15,18 @@ import timber.log.Timber
  * Both the AccessibilityService and the IME run in the same process,
  * so direct singleton access works without IPC.
  *
- * Gracefully degrades: if the accessibility service is not enabled,
- * [screenText] stays empty and [screenshotBase64] stays null;
- * voice input falls back to InputConnection-based context only.
+ * Gracefully degrades when the accessibility service is unavailable.
  */
 object ScreenTextProvider {
 
     private const val MAX_LENGTH = 4000
 
-    private val _screenText = MutableStateFlow("")
-    val screenTextFlow: StateFlow<String> = _screenText.asStateFlow()
+    @Volatile
+    private var screenTextByPackage: Map<String, String> = emptyMap()
 
-    /** The most recently collected on-screen text. */
-    val screenText: String get() = _screenText.value
+    fun getScreenText(packageName: String?): String {
+        return packageName?.let(screenTextByPackage::get).orEmpty()
+    }
 
     /**
      * The most recently captured screenshot as a data URI
@@ -36,8 +34,12 @@ object ScreenTextProvider {
      * Null if screenshot is unavailable or capture failed.
      */
     @Volatile
-    var screenshotBase64: String? = null
-        private set
+    private var screenshotBase64: String? = null
+
+    @Volatile
+    private var screenshotRequestId = 0L
+
+    private var screenshotDeferred = CompletableDeferred<String?>()
 
     /** Whether the accessibility service is currently running. */
     @Volatile
@@ -57,20 +59,24 @@ object ScreenTextProvider {
     /** Called by [ScreenTextAccessibilityService.onUnbind]. */
     fun onServiceDisabled() {
         isEnabled = false
-        _screenText.value = ""
-        screenshotBase64 = null
+        screenTextByPackage = emptyMap()
+        clearScreenshot()
         service = null
     }
 
     /** Called by [ScreenTextAccessibilityService] after a traversal. */
-    fun updateText(text: String) {
-        val trimmed = if (text.length > MAX_LENGTH) text.take(MAX_LENGTH) else text
-        _screenText.value = trimmed
+    fun updateText(values: Map<String, String>) {
+        screenTextByPackage = values.mapValues { (_, text) ->
+            if (text.length > MAX_LENGTH) text.take(MAX_LENGTH) else text
+        }
     }
 
     /** Called by [ScreenTextAccessibilityService] after a screenshot attempt. */
-    fun updateScreenshot(dataUri: String?) {
+    @Synchronized
+    fun updateScreenshot(requestId: Long, dataUri: String?) {
+        if (requestId != screenshotRequestId) return
         screenshotBase64 = dataUri
+        screenshotDeferred.complete(dataUri)
         if (dataUri != null) {
             Timber.d("ScreenTextProvider: screenshot updated, ${dataUri.length} chars")
         } else {
@@ -81,15 +87,43 @@ object ScreenTextProvider {
     /**
      * Request a screenshot from the accessibility service.
      * Must be called from the main thread.
-     * Returns true if the screenshot request was dispatched.
+     * Returns the request ID if the screenshot request was dispatched.
      */
-    fun requestScreenshot(): Boolean {
+    @Synchronized
+    fun requestScreenshot(): Long? {
+        screenshotDeferred.complete(null)
+        screenshotDeferred = CompletableDeferred()
+        screenshotRequestId += 1
+        screenshotBase64 = null
+        val requestId = screenshotRequestId
         val svc = service
         if (svc == null) {
             Timber.d("ScreenTextProvider: no service, cannot take screenshot")
-            return false
+            screenshotDeferred.complete(null)
+            return null
         }
-        return svc.takeScreenshot()
+        return if (svc.takeScreenshot(requestId)) {
+            requestId
+        } else {
+            screenshotDeferred.complete(null)
+            null
+        }
+    }
+
+    suspend fun awaitScreenshot(requestId: Long?): String? {
+        val deferred = synchronized(this) {
+            if (requestId == null || requestId != screenshotRequestId) null
+            else screenshotDeferred
+        } ?: return null
+        return withTimeoutOrNull(1_000L) { deferred.await() }
+    }
+
+    @Synchronized
+    fun clearScreenshot() {
+        screenshotDeferred.complete(null)
+        screenshotDeferred = CompletableDeferred()
+        screenshotRequestId += 1
+        screenshotBase64 = null
     }
 
     /**

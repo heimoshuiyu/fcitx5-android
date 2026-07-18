@@ -122,11 +122,15 @@ class FcitxApplication : Application() {
         instance = this
         // we don't have AppPrefs available yet
         val sharedPrefs = PreferenceManager.getDefaultSharedPreferences(ctx)
+        val secureVoicePrefs = ctx.getSharedPreferences("voice_credentials", MODE_PRIVATE)
         Timber.setupForest(verbose = sharedPrefs.getBoolean("verbose_log", false))
 
         Timber.d("isDirectBootMode=$isDirectBootMode")
 
-        AppPrefs.init(sharedPrefs)
+        AppPrefs.init(sharedPrefs, secureVoicePrefs)
+        if (!isDirectBootMode) {
+            AppPrefs.getInstance().voiceInput.migrateSecureValues()
+        }
         // record last pid for crash logs
         AppPrefs.getInstance().internal.pid.apply {
             val currentPid = Process.myPid()
@@ -135,7 +139,9 @@ class FcitxApplication : Application() {
             setValue(currentPid)
         }
         ClipboardManager.init(ctx)
-        TranscriptionHistoryManager.init(ctx)
+        if (!isDirectBootMode) {
+            TranscriptionHistoryManager.init(ctx)
+        }
         ThemeManager.init(resources.configuration)
         Locales.onLocaleChange(resources.configuration)
         registerReceiver(shutdownReceiver, IntentFilter(Intent.ACTION_SHUTDOWN))

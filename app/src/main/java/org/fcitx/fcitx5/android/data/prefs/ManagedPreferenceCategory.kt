@@ -93,6 +93,26 @@ abstract class ManagedPreferenceCategory(
         return pref
     }
 
+    protected fun secureEditText(
+        @StringRes
+        title: Int,
+        key: String,
+        defaultValue: String,
+        securePreferences: SharedPreferences,
+        enableUiOn: (() -> Boolean)? = null,
+    ): ManagedPreference.PSecureString {
+        val pref = ManagedPreference.PSecureString(
+            securePreferences,
+            key,
+            defaultValue,
+            sharedPreferences,
+        )
+        val ui = ManagedPreferenceUi.SecureEditText(title, key, pref, enableUiOn)
+        pref.register()
+        ui.registerUi()
+        return pref
+    }
+
     protected fun int(
         @StringRes
         title: Int,

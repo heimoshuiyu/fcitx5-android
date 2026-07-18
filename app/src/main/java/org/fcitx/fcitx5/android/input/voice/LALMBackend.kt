@@ -45,6 +45,7 @@ class LALMBackend(
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .followSslRedirects(false)
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -59,14 +60,9 @@ class LALMBackend(
         imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runTranscriptionCatching {
-            val url = getUrl()
-                ?: throw TranscriptionException("LALM API URL not configured")
-            val apiKey = getApiKey()
-                ?: throw TranscriptionException("LALM API key not configured")
-            val model = getModel()
-                ?: throw TranscriptionException("LALM model not configured")
-
-            val baseUrl = url.trimEnd('/')
+            val apiKey = requireConfigured(getApiKey(), "LALM API key")
+            val model = requireConfigured(getModel(), "LALM model")
+            val baseUrl = requireSecureBaseUrl(getUrl(), "LALM API URL")
             val audioBase64 = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
             val audioFormat = if (mime.contains("mp3")) "mp3" else "wav"
 
@@ -160,9 +156,8 @@ class LALMBackend(
 
             httpClient.newCall(httpRequest).executeAsync().use { response ->
                 if (!response.isSuccessful) {
-                    val errorBody = response.body.string()
                     throw TranscriptionException(
-                        "LALM error: ${response.code} - ${errorBody.take(200)}"
+                        "LALM error: ${response.code}"
                     )
                 }
 
@@ -171,11 +166,9 @@ class LALMBackend(
                     throw TranscriptionException("Empty response from LALM")
                 }
 
-                Timber.d("[$name] Response body: $responseBody")
-
                 val result = json.decodeFromString<ChatCompletionResponse>(responseBody)
                 val text = result.choices?.firstOrNull()?.message?.content ?: ""
-                TranscriptionResult(text = text, rawResponseBody = responseBody)
+                TranscriptionResult(text = text)
             }
         }
     }

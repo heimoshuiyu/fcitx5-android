@@ -316,11 +316,23 @@
     <string name="emoji_skin_tone_type_6">🏿 深膚色 (Type-6)</string>
     <string name="hide_unsupported_emojis">隱藏不支援的表情</string>
     <string name="preferred_voice_input">首選語音輸入</string>
+    <string name="edit_text_playground">EditText 測試區</string>
 
     <!-- Voice Input -->
     <string name="voice_input">語音輸入</string>
     <string name="voice_input_general">一般</string>
     <string name="voice_input_backend">後端</string>
+    <string name="voice_input_secret_configured">已設定</string>
+    <string name="voice_input_secret_not_configured">未設定</string>
+    <string name="voice_input_save_history">儲存轉錄歷史</string>
+    <string name="voice_input_save_history_summary">在本機儲存結果和請求中繼資料，不儲存提示詞、原始回應和截圖。</string>
+    <string name="voice_input_surrounding_text">傳送輸入框上下文</string>
+    <string name="voice_input_surrounding_text_summary">傳送游標前後的文字，以及語音編輯使用的選取文字。</string>
+    <string name="voice_input_clipboard_context">傳送剪貼簿文字</string>
+    <string name="voice_input_clipboard_context_summary">將最近一筆非敏感剪貼簿內容作為轉錄上下文傳送。</string>
+    <string name="voice_input_screen_text">傳送螢幕可見文字</string>
+    <string name="voice_input_screen_text_summary">將無障礙服務讀取的螢幕文字作為轉錄上下文傳送。</string>
+    <string name="voice_input_sensitive_field">敏感輸入框中已停用語音輸入</string>
     <string name="voice_backend_opencode">OpenCode</string>
     <string name="voice_backend_whisper">Whisper</string>
     <string name="voice_backend_lalm">LALM（語音大模型）</string>
@@ -358,7 +370,22 @@
     <string name="voice_input_auto_hotwords_list">已學習的熱詞</string>
     <string name="voice_input_auto_hotwords_list_summary">根據您的修正自動學習的熱詞。</string>
     <string name="voice_input_history">轉錄歷史</string>
-    <string name="voice_input_history_summary">檢視歷史轉錄記錄，包括提示詞、結果和原始 API 回應。</string>
+    <string name="voice_input_history_summary">檢視儲存在本機的轉錄結果和請求中繼資料。</string>
+    <string name="transcription_record_not_found">找不到記錄</string>
+    <string name="transcription_backend_edit">%1$s（編輯）</string>
+    <string name="transcription_duration_ms">%1$d 毫秒</string>
+    <string name="transcription_audio_info">%1$d 秒 / %2$d KB</string>
+    <string name="transcription_success">成功</string>
+    <string name="transcription_failed">失敗</string>
+    <string name="transcription_value_empty">（空白）</string>
+    <string name="transcription_value_none">（無）</string>
+    <string name="transcription_value_not_available">（無法使用）</string>
+    <string name="transcription_result">結果</string>
+    <string name="transcription_prompt">提示詞</string>
+    <string name="transcription_selected_text">選取文字</string>
+    <string name="transcription_screenshot">截圖</string>
+    <string name="transcription_screenshot_description">轉錄時擷取的螢幕截圖</string>
+    <string name="transcription_raw_response">原始回應</string>
     <string name="voice_backend_subscription">訂閱服務</string>
     <!-- Subscription -->
     <string name="subscription_status_authorized">訂閱服務：已登入</string>
@@ -371,11 +398,15 @@
     <string name="subscription_sign_out_summary">中斷您的訂閱帳號連接。</string>
     <string name="subscription_signed_out">已登出</string>
     <string name="subscription_auth_success">授權成功</string>
+    <string name="subscription_auth_failed">授權失敗：%1$s</string>
+    <string name="subscription_auth_invalid_state">授權失敗：回呼狀態無效</string>
+    <string name="subscription_auth_invalid_callback">授權失敗：回呼資訊不完整</string>
     <string name="subscription_manage_account">管理帳戶</string>
     <!-- Screen text context -->
     <string name="screen_text_context">螢幕文字上下文</string>
     <string name="screen_text_enabled">螢幕文字服務：已啟用</string>
-    <string name="screen_text_enabled_summary">正在讀取螢幕文字以提升語音辨識準確度。</string>
+    <string name="screen_text_enabled_summary">服務已可用。只有另外啟用螢幕文字上下文後才會傳送文字。</string>
+    <string name="subscription_gateway_invalid">訂閱服務位址必須使用 HTTPS</string>
     <string name="screen_text_not_enabled">螢幕文字服務：未啟用</string>
     <string name="screen_text_not_enabled_summary">啟用無障礙服務以讀取螢幕文字作為語音辨識上下文。需要在系統設定 > 無障礙中單獨授權。</string>
     <string name="voice_input_screen_screenshot">傳送截圖給模型</string>

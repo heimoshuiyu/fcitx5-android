@@ -27,7 +27,10 @@ import org.fcitx.fcitx5.android.utils.DeviceUtil
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.vibrator
 
-class AppPrefs(private val sharedPreferences: SharedPreferences) {
+class AppPrefs(
+    private val sharedPreferences: SharedPreferences,
+    private val securePreferences: SharedPreferences,
+) {
 
     inner class Internal : ManagedPreferenceInternal(sharedPreferences) {
         val firstRun = bool("first_run", true)
@@ -172,7 +175,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
             "space_long_press_behavior",
 
-            SpaceLongPressBehavior.HoldToTalk
+            SpaceLongPressBehavior.None
         )
         val spaceSwipeMoveCursor =
             switch(R.string.space_swipe_move_cursor, "space_swipe_move_cursor", true)
@@ -377,6 +380,34 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             VoiceBackendType.Subscription
         )
 
+        val saveHistory = switch(
+            R.string.voice_input_save_history,
+            "voice_input_save_history",
+            false,
+            R.string.voice_input_save_history_summary,
+        )
+
+        val surroundingTextContext = switch(
+            R.string.voice_input_surrounding_text,
+            "voice_input_surrounding_text",
+            false,
+            R.string.voice_input_surrounding_text_summary,
+        )
+
+        val clipboardContext = switch(
+            R.string.voice_input_clipboard_context,
+            "voice_input_clipboard_context",
+            false,
+            R.string.voice_input_clipboard_context_summary,
+        )
+
+        val screenTextContext = switch(
+            R.string.voice_input_screen_text,
+            "voice_input_screen_text",
+            false,
+            R.string.voice_input_screen_text_summary,
+        )
+
         // Hotwords (shared across all backends)
         val hotwords = editText(
             R.string.voice_input_hotwords,
@@ -389,7 +420,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val autoHotwords = switch(
             R.string.voice_input_auto_hotwords,
             "voice_input_auto_hotwords",
-            true,
+            false,
             R.string.voice_input_auto_hotwords_summary
         )
         val autoHotwordsList = editText(
@@ -410,10 +441,11 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             "voice_input_auth_username",
             "opencode"
         )
-        val authPassword = editText(
+        val authPassword = secureEditText(
             R.string.voice_input_auth_password,
             "voice_input_auth_password",
-            ""
+            "",
+            securePreferences,
         )
         val opencodeModel = editText(
             R.string.voice_input_opencode_model,
@@ -433,10 +465,11 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             "voice_input_whisper_url",
             "https://api.openai.com/v1"
         )
-        val whisperApiKey = editText(
+        val whisperApiKey = secureEditText(
             R.string.voice_input_whisper_api_key,
             "voice_input_whisper_api_key",
-            ""
+            "",
+            securePreferences,
         )
         val whisperModel = editText(
             R.string.voice_input_whisper_model,
@@ -455,10 +488,11 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             "voice_input_lalm_url",
             "https://api.openai.com/v1"
         )
-        val lalmApiKey = editText(
+        val lalmApiKey = secureEditText(
             R.string.voice_input_lalm_api_key,
             "voice_input_lalm_api_key",
-            ""
+            "",
+            securePreferences,
         )
         val lalmModel = editText(
             R.string.voice_input_lalm_model,
@@ -488,12 +522,32 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         )
 
         // Subscription backend (internal prefs, not shown as editable fields)
-        val subscriptionAccessToken = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_access_token", "").apply { register() }
-        val subscriptionRefreshToken = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_refresh_token", "").apply { register() }
+        val subscriptionAccessToken = ManagedPreference.PSecureString(
+            securePreferences,
+            "voice_input_subscription_access_token",
+            "",
+            sharedPreferences,
+        ).apply { register() }
+        val subscriptionRefreshToken = ManagedPreference.PSecureString(
+            securePreferences,
+            "voice_input_subscription_refresh_token",
+            "",
+            sharedPreferences,
+        ).apply { register() }
         val subscriptionGatewayUrl = ManagedPreference.PString(sharedPreferences, "voice_input_subscription_gateway_url", "https://voice.aquarium39.moe").apply { register() }
         // OAuth PKCE + state (transient, cleared after token exchange)
-        val oauthCodeVerifier = ManagedPreference.PString(sharedPreferences, "voice_input_oauth_code_verifier", "").apply { register() }
-        val oauthState = ManagedPreference.PString(sharedPreferences, "voice_input_oauth_state", "").apply { register() }
+        val oauthCodeVerifier = ManagedPreference.PSecureString(
+            securePreferences,
+            "voice_input_oauth_code_verifier",
+            "",
+            sharedPreferences,
+        ).apply { register() }
+        val oauthState = ManagedPreference.PSecureString(
+            securePreferences,
+            "voice_input_oauth_state",
+            "",
+            sharedPreferences,
+        ).apply { register() }
 
         // Screenshot context
         val screenScreenshot = switch(
@@ -509,7 +563,9 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             // General section (backend type + hotwords)
             val generalCategory = addCategory(screen, R.string.voice_input_general, listOf(
                 "voice_input_backend_type", "voice_input_hotwords",
-                "voice_input_auto_hotwords", "voice_input_auto_hotwords_list"
+                "voice_input_auto_hotwords", "voice_input_auto_hotwords_list",
+                "voice_input_save_history", "voice_input_surrounding_text",
+                "voice_input_clipboard_context"
             ), ctx)
             // Set custom summaries
             generalCategory.findPreference<androidx.preference.Preference>("voice_input_hotwords")?.let {
@@ -559,6 +615,18 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
                 }
             }
             return category
+        }
+
+        fun migrateSecureValues() {
+            listOf(
+                authPassword,
+                whisperApiKey,
+                lalmApiKey,
+                subscriptionAccessToken,
+                subscriptionRefreshToken,
+                oauthCodeVerifier,
+                oauthState,
+            ).forEach { it.getValue() }
         }
     }
 
@@ -625,11 +693,15 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         /**
          * MUST call before use
          */
-        fun init(sharedPreferences: SharedPreferences) {
+        fun init(
+            sharedPreferences: SharedPreferences,
+            securePreferences: SharedPreferences,
+        ) {
             if (instance != null)
                 return
-            instance = AppPrefs(sharedPreferences)
+            instance = AppPrefs(sharedPreferences, securePreferences)
             sharedPreferences.registerOnSharedPreferenceChangeListener(getInstance().onSharedPreferenceChangeListener)
+            securePreferences.registerOnSharedPreferenceChangeListener(getInstance().onSharedPreferenceChangeListener)
         }
 
         fun getInstance() = instance!!

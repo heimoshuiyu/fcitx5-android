@@ -8,14 +8,17 @@ import android.app.AlertDialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
-import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
@@ -37,10 +40,16 @@ class TranscriptionHistoryFragment : Fragment() {
     private lateinit var emptyView: TextView
     private lateinit var adapter: TranscriptionAdapter
     private val dateFormat = SimpleDateFormat("MM/dd HH:mm:ss", Locale.getDefault())
+    private val diffCallback = object : DiffUtil.ItemCallback<TranscriptionRecord>() {
+        override fun areItemsTheSame(
+            oldItem: TranscriptionRecord,
+            newItem: TranscriptionRecord,
+        ) = oldItem.id == newItem.id
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setHasOptionsMenu(true)
+        override fun areContentsTheSame(
+            oldItem: TranscriptionRecord,
+            newItem: TranscriptionRecord,
+        ) = oldItem == newItem
     }
 
     override fun onCreateView(
@@ -64,13 +73,29 @@ class TranscriptionHistoryFragment : Fragment() {
         }
         recyclerView.adapter = adapter
 
+        requireActivity().addMenuProvider(
+            object : MenuProvider {
+                override fun onCreateMenu(menu: Menu, menuInflater: android.view.MenuInflater) {
+                    menuInflater.inflate(R.menu.transcription_history_menu, menu)
+                }
+
+                override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+                    if (menuItem.itemId != R.id.action_clear_history) return false
+                    showClearHistoryDialog()
+                    return true
+                }
+            },
+            viewLifecycleOwner,
+            Lifecycle.State.STARTED,
+        )
+
         loadRecords()
     }
 
     private fun loadRecords() {
         lifecycleScope.launch {
             val records = withContext(Dispatchers.IO) {
-                TranscriptionHistoryManager.getAll()
+                TranscriptionHistoryManager.getPage(100, 0)
             }
             adapter.submitList(records)
             emptyView.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
@@ -78,31 +103,20 @@ class TranscriptionHistoryFragment : Fragment() {
         }
     }
 
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.transcription_history_menu, menu)
-        super.onCreateOptionsMenu(menu, inflater)
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_clear_history -> {
-                AlertDialog.Builder(requireContext())
-                    .setTitle(R.string.transcription_history_clear_title)
-                    .setMessage(R.string.transcription_history_clear_message)
-                    .setPositiveButton(android.R.string.ok) { _, _ ->
-                        lifecycleScope.launch {
-                            withContext(Dispatchers.IO) {
-                                TranscriptionHistoryManager.deleteAll()
-                            }
-                            loadRecords()
-                        }
+    private fun showClearHistoryDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.transcription_history_clear_title)
+            .setMessage(R.string.transcription_history_clear_message)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        TranscriptionHistoryManager.deleteAll()
                     }
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show()
-                true
+                    loadRecords()
+                }
             }
-            else -> super.onOptionsItemSelected(item)
-        }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     override fun onResume() {
@@ -112,14 +126,7 @@ class TranscriptionHistoryFragment : Fragment() {
 
     inner class TranscriptionAdapter(
         private val onClick: (TranscriptionRecord) -> Unit
-    ) : RecyclerView.Adapter<TranscriptionAdapter.ViewHolder>() {
-
-        private var records: List<TranscriptionRecord> = emptyList()
-
-        fun submitList(newRecords: List<TranscriptionRecord>) {
-            records = newRecords
-            notifyDataSetChanged()
-        }
+    ) : ListAdapter<TranscriptionRecord, TranscriptionAdapter.ViewHolder>(diffCallback) {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view = LayoutInflater.from(parent.context)
@@ -128,10 +135,8 @@ class TranscriptionHistoryFragment : Fragment() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            holder.bind(records[position])
+            holder.bind(getItem(position))
         }
-
-        override fun getItemCount() = records.size
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             private val timeText: TextView = view.findViewById(R.id.time_text)
@@ -142,20 +147,23 @@ class TranscriptionHistoryFragment : Fragment() {
 
             fun bind(record: TranscriptionRecord) {
                 timeText.text = dateFormat.format(Date(record.timestamp))
-                backendText.text = record.backendType
-                durationText.text = "${record.durationMs}ms"
+                backendText.text = if (record.editMode) {
+                    getString(R.string.transcription_backend_edit, record.backendType)
+                } else {
+                    record.backendType
+                }
+                durationText.text = getString(R.string.transcription_duration_ms, record.durationMs)
 
                 if (record.success) {
-                    resultText.text = record.resultText.ifBlank { "(empty)" }
+                    resultText.text = record.resultText.ifBlank {
+                        getString(R.string.transcription_value_empty)
+                    }
                     statusIndicator.setBackgroundResource(R.drawable.bg_status_success)
                 } else {
-                    resultText.text = "✗ ${record.errorMessage}".takeIf { record.errorMessage.isNotEmpty() }
-                        ?: "Failed"
+                    resultText.text = record.errorMessage.ifBlank {
+                        getString(R.string.transcription_failed)
+                    }
                     statusIndicator.setBackgroundResource(R.drawable.bg_status_failed)
-                }
-
-                if (record.editMode) {
-                    backendText.text = "${record.backendType} (edit)"
                 }
 
                 itemView.setOnClickListener { onClick(record) }

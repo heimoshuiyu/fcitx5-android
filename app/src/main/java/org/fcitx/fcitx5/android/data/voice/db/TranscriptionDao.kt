@@ -13,9 +13,6 @@ interface TranscriptionDao {
     @Insert
     suspend fun insert(record: TranscriptionRecord): Long
 
-    @Query("SELECT * FROM ${TranscriptionRecord.TABLE_NAME} ORDER BY timestamp DESC")
-    suspend fun getAll(): List<TranscriptionRecord>
-
     @Query("SELECT * FROM ${TranscriptionRecord.TABLE_NAME} ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
     suspend fun getPage(limit: Int, offset: Int): List<TranscriptionRecord>
 
@@ -28,9 +25,18 @@ interface TranscriptionDao {
     @Query("DELETE FROM ${TranscriptionRecord.TABLE_NAME} WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    @Query("DELETE FROM ${TranscriptionRecord.TABLE_NAME}")
-    suspend fun deleteAll()
-
     @Query("DELETE FROM ${TranscriptionRecord.TABLE_NAME} WHERE timestamp < :timestamp")
     suspend fun deleteOlderThan(timestamp: Long)
+
+    @Query(
+        "DELETE FROM ${TranscriptionRecord.TABLE_NAME} WHERE id NOT IN " +
+            "(SELECT id FROM ${TranscriptionRecord.TABLE_NAME} ORDER BY timestamp DESC LIMIT :limit)"
+    )
+    suspend fun trimTo(limit: Int)
+
+    @Query(
+        "UPDATE ${TranscriptionRecord.TABLE_NAME} SET prompt = '', selectedText = '', " +
+            "rawResponseBody = '', screenshotBase64 = ''"
+    )
+    suspend fun redactSensitiveDetails()
 }

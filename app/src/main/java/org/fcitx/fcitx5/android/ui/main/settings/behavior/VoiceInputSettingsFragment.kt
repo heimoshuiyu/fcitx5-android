@@ -6,8 +6,6 @@
 package org.fcitx.fcitx5.android.ui.main.settings.behavior
 
 import android.content.Intent
-import android.content.DialogInterface
-import android.content.SharedPreferences
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
@@ -24,7 +22,6 @@ import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceFragment
 import org.fcitx.fcitx5.android.input.voice.ScreenTextProvider
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
-import timber.log.Timber
 import java.security.MessageDigest
 import java.security.SecureRandom
 
@@ -32,18 +29,14 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
     private val prefs = AppPrefs.getInstance().voiceInput
 
-    private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "voice_input_subscription_access_token") {
-            // SharedPreferences listener fires on the thread that made the change
-            // (may be a background thread from OAuth token exchange), so post to UI
+    private val subscriptionChangeListener =
+        org.fcitx.fcitx5.android.data.prefs.ManagedPreference.OnChangeListener<String> { _, _ ->
             view?.post {
-                val subPref = preferenceScreen.findPreference<Preference>("subscription_entry")
-                if (subPref != null) {
-                    updateSubscriptionPref(subPref)
+                preferenceScreen.findPreference<Preference>("subscription_entry")?.let {
+                    updateSubscriptionPref(it)
                 }
             }
         }
-    }
 
     override fun onPreferenceUiCreated(screen: PreferenceScreen) {
         val context = screen.context
@@ -89,12 +82,24 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         category.addPreference(statusPref)
         updateStatusPref(statusPref)
 
-        // Screenshot toggle — below accessibility status
+        val screenTextPref = SwitchPreference(context).apply {
+            key = "voice_input_screen_text"
+            title = context.getString(R.string.voice_input_screen_text)
+            summary = context.getString(R.string.voice_input_screen_text_summary)
+            order = 1
+            setDefaultValue(false)
+            setOnPreferenceChangeListener { _, value ->
+                if (value == false) ScreenTextProvider.updateText(emptyMap())
+                true
+            }
+        }
+        category.addPreference(screenTextPref)
+
         val screenshotPref = SwitchPreference(context).apply {
             key = "voice_input_screen_screenshot"
             title = context.getString(R.string.voice_input_screen_screenshot)
             summary = context.getString(R.string.voice_input_screen_screenshot_summary)
-            order = 1
+            order = 2
             setDefaultValue(false)
         }
         category.addPreference(screenshotPref)
@@ -105,11 +110,11 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         val prefs = AppPrefs.getInstance().voiceInput
         val token = prefs.subscriptionAccessToken.getValue()
 
-        if (token.isNotEmpty()) {
+        if (token.isNotBlank()) {
             pref.title = context.getString(R.string.subscription_status_authorized)
             pref.summary = context.getString(R.string.subscription_status_authorized_summary)
             pref.setOnPreferenceClickListener {
-                val gatewayUrl = prefs.subscriptionGatewayUrl.getValue().trimEnd('/')
+                val gatewayUri = secureGatewayUri() ?: return@setOnPreferenceClickListener true
                 AlertDialog.Builder(context)
                     .setTitle(R.string.subscription_status_authorized)
                     .setItems(arrayOf(
@@ -118,8 +123,10 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
                     )) { _, which ->
                         when (which) {
                             0 -> {
-                                val authUrl = "$gatewayUrl/account?token=$token"
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+                                val accountUrl = gatewayUri.buildUpon()
+                                    .appendPath("account")
+                                    .build()
+                                startActivity(Intent(Intent.ACTION_VIEW, accountUrl))
                             }
                             1 -> {
                                 prefs.subscriptionAccessToken.setValue("")
@@ -137,7 +144,7 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
             pref.title = context.getString(R.string.subscription_status_not_authorized)
             pref.summary = context.getString(R.string.subscription_sign_in_summary)
             pref.setOnPreferenceClickListener {
-                val gatewayUrl = prefs.subscriptionGatewayUrl.getValue().trimEnd('/')
+                val gatewayUri = secureGatewayUri() ?: return@setOnPreferenceClickListener true
 
                 // Generate PKCE code_verifier (RFC 7636 §4.1: 43-128 chars, base64url)
                 val secureRandom = SecureRandom()
@@ -164,11 +171,26 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
                 prefs.oauthCodeVerifier.setValue(codeVerifier)
                 prefs.oauthState.setValue(state)
 
-                val authUrl = "$gatewayUrl/oauth/authorize?redirect_uri=fcitx5://oauth/callback&response_type=code&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state"
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+                val authUrl = gatewayUri.buildUpon()
+                    .appendPath("oauth")
+                    .appendPath("authorize")
+                    .appendQueryParameter("redirect_uri", "fcitx5://oauth/callback")
+                    .appendQueryParameter("response_type", "code")
+                    .appendQueryParameter("code_challenge", codeChallenge)
+                    .appendQueryParameter("code_challenge_method", "S256")
+                    .appendQueryParameter("state", state)
+                    .build()
+                startActivity(Intent(Intent.ACTION_VIEW, authUrl))
                 true
             }
         }
+    }
+
+    private fun secureGatewayUri(): Uri? {
+        val uri = Uri.parse(prefs.subscriptionGatewayUrl.getValue().trimEnd('/'))
+        if (uri.scheme == "https" && !uri.host.isNullOrEmpty()) return uri
+        Toast.makeText(requireContext(), R.string.subscription_gateway_invalid, Toast.LENGTH_LONG).show()
+        return null
     }
 
     private fun updateStatusPref(pref: Preference) {
@@ -194,9 +216,7 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
     override fun onResume() {
         super.onResume()
-        // Register preference change listener to auto-refresh subscription status
-        // (e.g. when OAuth callback completes token exchange in background)
-        preferenceManager.sharedPreferences!!.registerOnSharedPreferenceChangeListener(prefChangeListener)
+        prefs.subscriptionAccessToken.registerOnChangeListener(subscriptionChangeListener)
         // Also refresh immediately in case the change happened while we were paused
         val subPref = preferenceScreen.findPreference<Preference>("subscription_entry")
         if (subPref != null) {
@@ -210,6 +230,6 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
     override fun onPause() {
         super.onPause()
-        preferenceManager.sharedPreferences!!.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
+        prefs.subscriptionAccessToken.unregisterOnChangeListener(subscriptionChangeListener)
     }
 }

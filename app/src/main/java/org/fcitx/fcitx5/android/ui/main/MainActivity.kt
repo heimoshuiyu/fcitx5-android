@@ -22,6 +22,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.forEach
 import androidx.core.view.updateLayoutParams
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.fragment.NavHostFragment
@@ -39,6 +42,8 @@ import org.fcitx.fcitx5.android.utils.startActivity
 import splitties.dimensions.dp
 import splitties.resources.styledColor
 import splitties.views.topPadding
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -93,6 +98,27 @@ class MainActivity : AppCompatActivity() {
                 viewModel.enableToolbarShadow()
             }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.oauthEvents.collect { event ->
+                    when (event) {
+                        MainViewModel.OAuthEvent.Success -> Toast.makeText(
+                            this@MainActivity,
+                            R.string.subscription_auth_success,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        is MainViewModel.OAuthEvent.Failure -> Toast.makeText(
+                            this@MainActivity,
+                            getString(
+                                R.string.subscription_auth_failed,
+                                event.message.ifEmpty { getString(R.string.voice_input_error) },
+                            ),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+        }
         processIntent(intent)
         checkNotificationPermission()
     }
@@ -112,6 +138,8 @@ class MainActivity : AppCompatActivity() {
                 val data = intent.data ?: return
                 if (data.scheme == "fcitx5" && data.host == "oauth" && data.path?.startsWith("/callback") == true) {
                     handleOAuthCallback(data)
+                    intent.action = null
+                    intent.data = null
                 } else {
                     AlertDialog.Builder(this)
                         .setTitle(R.string.pinyin_dict)
@@ -137,94 +165,58 @@ class MainActivity : AppCompatActivity() {
         val state = data.getQueryParameter("state")
         val error = data.getQueryParameter("error")
 
-        if (error != null) {
-            val desc = data.getQueryParameter("error_description") ?: error
-            Toast.makeText(this, "Authorization failed: $desc", Toast.LENGTH_LONG).show()
-            return
-        }
+        if (viewModel.isOAuthExchangeInProgress(state)) return
 
-        // Verify state parameter (CSRF protection)
         val prefs = AppPrefs.getInstance().voiceInput
         val savedState = prefs.oauthState.getValue()
         if (state.isNullOrEmpty() || state != savedState) {
-            Toast.makeText(this, "Authorization failed: invalid state (possible CSRF)", Toast.LENGTH_LONG).show()
-            // Clear OAuth state
-            prefs.oauthState.setValue("")
-            prefs.oauthCodeVerifier.setValue("")
+            Toast.makeText(this, R.string.subscription_auth_invalid_state, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (error != null) {
+            val desc = data.getQueryParameter("error_description") ?: error
+            clearOAuthState()
+            Toast.makeText(
+                this,
+                getString(R.string.subscription_auth_failed, desc),
+                Toast.LENGTH_LONG,
+            ).show()
             return
         }
 
         if (code == null) {
-            Toast.makeText(this, "Authorization failed: invalid callback", Toast.LENGTH_LONG).show()
+            clearOAuthState()
+            Toast.makeText(this, R.string.subscription_auth_invalid_callback, Toast.LENGTH_LONG).show()
             return
         }
 
         // Read PKCE code_verifier saved before login
         val codeVerifier = prefs.oauthCodeVerifier.getValue()
+        if (codeVerifier.isEmpty()) {
+            clearOAuthState()
+            Toast.makeText(this, R.string.subscription_auth_invalid_callback, Toast.LENGTH_LONG).show()
+            return
+        }
 
         // Exchange code for tokens via gateway
         val gatewayUrl = prefs.subscriptionGatewayUrl.getValue().trimEnd('/')
+        val gatewayUri = Uri.parse(gatewayUrl)
+        if (gatewayUri.scheme != "https" || gatewayUri.host.isNullOrEmpty()) {
+            clearOAuthState()
+            Toast.makeText(this, R.string.subscription_gateway_invalid, Toast.LENGTH_LONG).show()
+            return
+        }
 
-        Thread {
-            try {
-                val client = okhttp3.OkHttpClient()
-                val formBuilder = okhttp3.FormBody.Builder()
-                    .add("code", code)
-                    .add("grant_type", "authorization_code")
-                    .add("redirect_uri", "fcitx5://oauth/callback")
+        if (viewModel.exchangeOAuthCode(state, gatewayUrl, code, codeVerifier)) {
+            clearOAuthState()
+        }
+    }
 
-                // Include PKCE code_verifier if available
-                if (codeVerifier.isNotEmpty()) {
-                    formBuilder.add("code_verifier", codeVerifier)
-                }
-
-                val request = okhttp3.Request.Builder()
-                    .url("$gatewayUrl/oauth/token")
-                    .post(formBuilder.build())
-                    .build()
-
-                val response = client.newCall(request).execute()
-                val responseBody = response.body.string()
-
-                if (response.isSuccessful) {
-                    val json = org.json.JSONObject(responseBody)
-                    val accessToken = json.getString("access_token")
-                    val refreshToken = json.optString("refresh_token", "")
-
-                    prefs.subscriptionAccessToken.setValue(accessToken)
-                    if (refreshToken.isNotEmpty()) {
-                        prefs.subscriptionRefreshToken.setValue(refreshToken)
-                    }
-
-                    // Clear OAuth transient state (PKCE verifier + state)
-                    prefs.oauthCodeVerifier.setValue("")
-                    prefs.oauthState.setValue("")
-
-                    runOnUiThread {
-                        Toast.makeText(this, R.string.subscription_auth_success, Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    runOnUiThread {
-                        Toast.makeText(
-                            this,
-                            "Authorization failed: ${response.code}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            } catch (e: Exception) {
-                // Clear OAuth transient state on error too
-                prefs.oauthCodeVerifier.setValue("")
-                prefs.oauthState.setValue("")
-                runOnUiThread {
-                    Toast.makeText(
-                        this,
-                        "Authorization error: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }.start()
+    private fun clearOAuthState() {
+        val prefs = AppPrefs.getInstance().voiceInput
+        prefs.oauthCodeVerifier.setValue("")
+        prefs.oauthState.setValue("")
     }
 
     private fun setupToolbarMenu(menu: Menu) {

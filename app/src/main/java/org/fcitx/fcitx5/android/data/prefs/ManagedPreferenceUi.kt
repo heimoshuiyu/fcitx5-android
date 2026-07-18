@@ -9,6 +9,7 @@ import androidx.annotation.StringRes
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
+import androidx.preference.PreferenceDataStore
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.ui.main.modified.MySwitchPreference
 import org.fcitx.fcitx5.android.ui.main.settings.DialogSeekBarPreference
@@ -125,6 +126,49 @@ abstract class ManagedPreferenceUi<T : Preference>(
                         android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
                     editText.minLines = 3
                     editText.gravity = android.view.Gravity.TOP
+                }
+            }
+        }
+    }
+
+    class SecureEditText(
+        @StringRes
+        val title: Int,
+        key: String,
+        private val preference: ManagedPreference.PSecureString,
+        enableUiOn: (() -> Boolean)? = null,
+    ) : ManagedPreferenceUi<EditTextPreference>(key, enableUiOn) {
+        @android.annotation.SuppressLint("InlinedApi")
+        override fun createUi(context: Context) = EditTextPreference(context).apply {
+            key = this@SecureEditText.key
+            isIconSpaceReserved = false
+            isSingleLineTitle = false
+            setTitle(this@SecureEditText.title)
+            setDialogTitle(this@SecureEditText.title)
+            preferenceDataStore = object : PreferenceDataStore() {
+                override fun getString(key: String?, defValue: String?) = preference.getValue()
+
+                override fun putString(key: String?, value: String?) {
+                    preference.setValue(value.orEmpty())
+                }
+            }
+            summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+                context.getString(
+                    if (it.text.isNullOrEmpty()) {
+                        R.string.voice_input_secret_not_configured
+                    } else {
+                        R.string.voice_input_secret_configured
+                    },
+                )
+            }
+            setOnBindEditTextListener { editText ->
+                editText.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD or
+                    android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    editText.imeOptions = editText.imeOptions or
+                        android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                    editText.importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
                 }
             }
         }

@@ -48,6 +48,7 @@ class SubscriptionBackend(
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .followSslRedirects(false)
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -59,8 +60,8 @@ class SubscriptionBackend(
      * Returns new token pair on success, null on failure.
      */
     private suspend fun refreshTokens(baseUrl: String): TokenRefreshResult? {
-        val refreshToken = getRefreshToken()
-        if (refreshToken.isNullOrEmpty()) {
+        val refreshToken = getRefreshToken()?.takeIf { it.isNotBlank() }
+        if (refreshToken == null) {
             Timber.w("[$name] No refresh token available, cannot refresh")
             return null
         }
@@ -86,14 +87,19 @@ class SubscriptionBackend(
                 if (body.isEmpty()) return null
                 val tokenResponse = json.decodeFromString<TokenResponse>(body)
                 TokenRefreshResult(
-                    accessToken = tokenResponse.access_token,
-                    refreshToken = tokenResponse.refresh_token,
+                    accessToken = requireConfigured(
+                        tokenResponse.access_token,
+                        "Refreshed access token",
+                    ),
+                    refreshToken = tokenResponse.refresh_token
+                        ?.takeIf { it.isNotBlank() }
+                        ?: refreshToken,
                 )
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Timber.e(e, "[$name] Token refresh exception")
+            Timber.w("[$name] Token refresh failed: ${e.javaClass.simpleName}")
             null
         }
     }
@@ -110,14 +116,12 @@ class SubscriptionBackend(
                     detail.error to "Monthly usage limit exceeded. Please upgrade your plan."
                 detail != null && detail.error == "invalid_token" ->
                     detail.error to "Session expired. Please sign in again."
-                detail != null && detail.error_description != null ->
-                    detail.error to detail.error_description
                 detail != null && detail.error != null ->
-                    detail.error to detail.error
+                    detail.error to "Server error: $statusCode"
                 else -> null to "Server error: $statusCode"
             }
         } catch (_: Exception) {
-            null to "Server error: $statusCode - ${errorBody?.take(200)}"
+            null to "Server error: $statusCode"
         }
     }
 
@@ -129,13 +133,12 @@ class SubscriptionBackend(
         imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runTranscriptionCatching {
-            val gatewayUrl = getGatewayUrl()
-                ?: throw TranscriptionException("Subscription gateway not configured")
-
-            val token = getAccessToken()
+            val token = getAccessToken()?.trim()?.takeIf { it.isNotEmpty() }
                 ?: throw TranscriptionException("Not authorized. Please sign in to your subscription.")
-
-            val baseUrl = gatewayUrl.trimEnd('/')
+            val baseUrl = requireSecureBaseUrl(
+                getGatewayUrl(),
+                "Subscription gateway",
+            )
             val audioBase64 = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
 
             // Build instruction for edit mode
@@ -183,12 +186,9 @@ class SubscriptionBackend(
                             throw TranscriptionException("Empty response from server")
                         }
 
-                        Timber.d("[$name] Response body: $responseBody")
-
                         val result = json.decodeFromString<TranscribeResponse>(responseBody)
                         return@runTranscriptionCatching TranscriptionResult(
                             text = result.text,
-                            rawResponseBody = responseBody,
                         )
                     }
 
@@ -227,9 +227,8 @@ class SubscriptionBackend(
                             if (retryBody.isEmpty()) {
                                 throw TranscriptionException("Empty response from server")
                             }
-                            Timber.d("[$name] Retry response body: $retryBody")
                             val result = json.decodeFromString<TranscribeResponse>(retryBody)
-                            TranscriptionResult(text = result.text, rawResponseBody = retryBody)
+                            TranscriptionResult(text = result.text)
                         }
                 }
 
@@ -252,7 +251,7 @@ private data class TokenRefreshResult(
 @kotlinx.serialization.Serializable
 private data class TokenResponse(
     val access_token: String,
-    val refresh_token: String = "",
+    val refresh_token: String? = null,
     val token_type: String = "Bearer",
     val expires_in: Int = 3600,
 )

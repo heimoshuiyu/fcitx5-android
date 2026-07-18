@@ -4,9 +4,11 @@
  */
 package org.fcitx.fcitx5.android.input.voice
 
+import android.Manifest
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import androidx.annotation.RequiresPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +34,8 @@ class AudioRecorder {
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         private const val BUFFER_FACTOR = 2
+        private const val MAX_RECORDING_SECONDS = 60
+        private const val MAX_PCM_BYTES = SAMPLE_RATE * 2 * MAX_RECORDING_SECONDS
     }
 
     private val bufferSize = AudioRecord.getMinBufferSize(
@@ -41,6 +45,7 @@ class AudioRecorder {
     ) * BUFFER_FACTOR
 
     private var audioRecord: AudioRecord? = null
+    @Volatile
     private var isRecording = false
 
     private val _amplitude = MutableStateFlow(0f)
@@ -52,6 +57,7 @@ class AudioRecorder {
     /**
      * Start recording. Returns when stopRecording() is called.
      */
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     suspend fun recordUntil(): ByteArray {
         return withContext(Dispatchers.IO) {
             val pcmBuffer = ByteArrayOutputStream()
@@ -88,6 +94,9 @@ class AudioRecorder {
 
                         val rms = calculateRms(readBuffer, readCount)
                         _amplitude.value = rms
+                        if (pcmBuffer.size() >= MAX_PCM_BYTES) {
+                            isRecording = false
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -97,7 +106,8 @@ class AudioRecorder {
                 stopRecording()
             }
 
-            pcmToWav(pcmBuffer.toByteArray())
+            val pcmData = pcmBuffer.toByteArray()
+            if (pcmData.isEmpty()) ByteArray(0) else pcmToWav(pcmData)
         }
     }
 

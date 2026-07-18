@@ -40,6 +40,7 @@ class OpenCodeBackend(
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .followSslRedirects(false)
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -54,10 +55,7 @@ class OpenCodeBackend(
         imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runTranscriptionCatching {
-            val serverUrl = getServerUrl()
-                ?: throw TranscriptionException("Server URL not configured")
-
-            val baseUrl = serverUrl.trimEnd('/')
+            val baseUrl = requireSecureBaseUrl(getServerUrl(), "Server URL")
             val audioBase64 = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
 
             val modelStr = getModel()?.trim()
@@ -119,14 +117,7 @@ class OpenCodeBackend(
 
             httpClient.newCall(httpRequest).executeAsync().use { response ->
                 if (!response.isSuccessful) {
-                    val errorBody = response.body.string()
-                    val errorMessage = try {
-                        val error = json.decodeFromString<TranscribeError>(errorBody)
-                        error.data?.message ?: "Server error: ${response.code}"
-                    } catch (_: Exception) {
-                        "Server error: ${response.code} - ${errorBody.take(200)}"
-                    }
-                    throw TranscriptionException(errorMessage)
+                    throw TranscriptionException("Server error: ${response.code}")
                 }
 
                 val responseBody = response.body.string()
@@ -134,16 +125,14 @@ class OpenCodeBackend(
                     throw TranscriptionException("Empty response from server")
                 }
 
-                Timber.d("[$name] Response body: $responseBody")
-
                 val result = json.decodeFromString<TranscribeResponse>(responseBody)
-                TranscriptionResult(text = result.text, rawResponseBody = responseBody)
+                TranscriptionResult(text = result.text)
             }
         }
     }
 
     private fun buildAuthHeader(): String? {
-        val password = getAuthPassword() ?: return null
+        val password = getAuthPassword()?.takeIf { it.isNotBlank() } ?: return null
         val username = getAuthUsername()
         return Credentials.basic(username, password)
     }

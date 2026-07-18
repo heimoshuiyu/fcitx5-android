@@ -34,6 +34,7 @@ class WhisperBackend(
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .followSslRedirects(false)
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -48,12 +49,9 @@ class WhisperBackend(
         @Suppress("UNUSED_PARAMETER") imageBase64: String?
     ): Result<TranscriptionResult> = withContext(Dispatchers.IO) {
         runTranscriptionCatching {
-            val url = getUrl()
-                ?: throw TranscriptionException("Whisper API URL not configured")
-            val apiKey = getApiKey()
-                ?: throw TranscriptionException("Whisper API key not configured")
-
-            val baseUrl = url.trimEnd('/')
+            val apiKey = requireConfigured(getApiKey(), "Whisper API key")
+            val model = requireConfigured(getModel(), "Whisper model")
+            val baseUrl = requireSecureBaseUrl(getUrl(), "Whisper API URL")
             val extension = if (mime.contains("mp3")) "mp3" else "wav"
             val audioMediaType = mime.toMediaType()
 
@@ -64,11 +62,13 @@ class WhisperBackend(
                     "audio.$extension",
                     audioBytes.toRequestBody(audioMediaType)
                 )
-                .addFormDataPart("model", getModel())
+                .addFormDataPart("model", model)
                 .addFormDataPart("response_format", "json")
 
             prompt?.let { bodyBuilder.addFormDataPart("prompt", it) }
-            getLanguage()?.let { bodyBuilder.addFormDataPart("language", it) }
+            getLanguage()?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                bodyBuilder.addFormDataPart("language", it)
+            }
 
             val httpRequest = Request.Builder()
                 .url("$baseUrl/audio/transcriptions")
@@ -78,9 +78,8 @@ class WhisperBackend(
 
             httpClient.newCall(httpRequest).executeAsync().use { response ->
                 if (!response.isSuccessful) {
-                    val errorBody = response.body.string()
                     throw TranscriptionException(
-                        "Whisper error: ${response.code} - ${errorBody.take(200)}"
+                        "Whisper error: ${response.code}"
                     )
                 }
 
@@ -89,12 +88,9 @@ class WhisperBackend(
                     throw TranscriptionException("Empty response from Whisper")
                 }
 
-                Timber.d("[$name] Response body: $responseBody")
-
                 val result = json.decodeFromString<WhisperResponse>(responseBody)
                 TranscriptionResult(
                     text = result.text ?: "",
-                    rawResponseBody = responseBody,
                 )
             }
         }

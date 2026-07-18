@@ -9,7 +9,10 @@ import androidx.core.content.ContextCompat
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import android.widget.Toast
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.core.CapabilityFlag
+import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.daemon.launchOnReady
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
@@ -82,6 +85,7 @@ class CommonKeyActionListener :
     private var floatingIndicator: FloatingVoiceIndicator? = null
     private var amplitudeJob: kotlinx.coroutines.Job? = null
     private var stateObserverJob: kotlinx.coroutines.Job? = null
+    private var voiceInputAllowed = true
 
     // there should be a new fcitx API for this
     private suspend fun FcitxAPI.commitAndReset() {
@@ -217,6 +221,10 @@ class CommonKeyActionListener :
     }
 
     private fun startHoldToTalk() {
+        if (!voiceInputAllowed) {
+            Toast.makeText(service, R.string.voice_input_sensitive_field, Toast.LENGTH_SHORT).show()
+            return
+        }
         // Create controller and indicator if needed
         if (holdToTalkController == null) {
             holdToTalkController = HoldToTalkController(service)
@@ -270,6 +278,7 @@ class CommonKeyActionListener :
                 }
             }
             HoldToTalkController.StartResult.NO_PERMISSION -> {
+                cleanupHoldToTalk()
                 val intent = android.content.Intent(service, MicrophonePermissionActivity::class.java).apply {
                     addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
@@ -278,6 +287,15 @@ class CommonKeyActionListener :
             HoldToTalkController.StartResult.ALREADY_ACTIVE -> {
                 // Already recording, ignore
             }
+            HoldToTalkController.StartResult.NO_INPUT -> cleanupHoldToTalk()
+            HoldToTalkController.StartResult.SENSITIVE_INPUT -> {
+                cleanupHoldToTalk()
+                Toast.makeText(
+                    service,
+                    R.string.voice_input_sensitive_field,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
         }
     }
 
@@ -285,7 +303,7 @@ class CommonKeyActionListener :
         val controller = holdToTalkController ?: return
         val indicator = floatingIndicator ?: return
 
-        // Stop recording, this triggers transcription
+        if (controller.state.value != HoldToTalkController.State.RECORDING) return
         controller.stopRecording()
         indicator.showTranscribing()
     }
@@ -343,9 +361,11 @@ class CommonKeyActionListener :
         holdToTalkController?.cacheCurrentText(start, end)
     }
 
-    override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: org.fcitx.fcitx5.android.core.CapabilityFlags) {
-        // Input field changed — flush auto hotword detection, then reset
+    override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: CapabilityFlags) {
         holdToTalkController?.flushAutoHotword()
+        cleanupHoldToTalk()
+        voiceInputAllowed = !capFlags.has(CapabilityFlag.Password) &&
+            !capFlags.has(CapabilityFlag.Sensitive)
     }
 
     override fun onWindowDetached(window: org.fcitx.fcitx5.android.input.wm.InputWindow) {

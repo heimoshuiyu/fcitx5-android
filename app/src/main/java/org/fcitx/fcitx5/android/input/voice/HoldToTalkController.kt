@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.input.voice
 
 import android.text.InputType
+import android.view.inputmethod.InputConnection
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +15,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.clipboard.ClipboardManager
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.voice.TranscriptionHistoryManager
@@ -55,50 +57,73 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
     /** Latest cached text from the transcribed region (updated on each selection change) */
     private var cachedCurrentText: String? = null
 
+    private val openCodeBackend by lazy {
+        OpenCodeBackend(
+            getServerUrl = { prefs.serverUrl.getValue() },
+            getAuthUsername = { prefs.authUsername.getValue() },
+            getAuthPassword = { prefs.authPassword.getValue() },
+            getModel = { prefs.opencodeModel.getValue() },
+        )
+    }
+    private val whisperBackend by lazy {
+        WhisperBackend(
+            getUrl = { prefs.whisperUrl.getValue() },
+            getApiKey = { prefs.whisperApiKey.getValue() },
+            getModel = { prefs.whisperModel.getValue() },
+            getLanguage = { prefs.whisperLanguage.getValue() },
+        )
+    }
+    private val lalmBackend by lazy {
+        LALMBackend(
+            getUrl = { prefs.lalmUrl.getValue() },
+            getApiKey = { prefs.lalmApiKey.getValue() },
+            getModel = { prefs.lalmModel.getValue() },
+            getSystemPrompt = { prefs.lalmSystemPrompt.getValue() },
+            getAudioFormat = { prefs.lalmAudioFormat.getValue() },
+            getTemperature = { prefs.lalmTemperature.getValue() },
+        )
+    }
+    private val subscriptionBackend by lazy {
+        SubscriptionBackend(
+            getGatewayUrl = { prefs.subscriptionGatewayUrl.getValue() },
+            getAccessToken = { prefs.subscriptionAccessToken.getValue() },
+            getRefreshToken = { prefs.subscriptionRefreshToken.getValue() },
+            onTokensUpdated = { access, refresh ->
+                prefs.subscriptionAccessToken.setValue(access)
+                prefs.subscriptionRefreshToken.setValue(refresh)
+            },
+            onSessionExpired = {
+                prefs.subscriptionAccessToken.setValue("")
+                prefs.subscriptionRefreshToken.setValue("")
+            },
+        )
+    }
+
     /** Create backend based on current settings */
     private fun createBackend(): VoiceBackend {
-        return when (val type = prefs.backendType.getValue()) {
-            VoiceBackendType.OpenCode -> OpenCodeBackend(
-                getServerUrl = { prefs.serverUrl.getValue() },
-                getAuthUsername = { prefs.authUsername.getValue() },
-                getAuthPassword = { prefs.authPassword.getValue() },
-                getModel = { prefs.opencodeModel.getValue() },
-            )
-            VoiceBackendType.Whisper -> WhisperBackend(
-                getUrl = { prefs.whisperUrl.getValue() },
-                getApiKey = { prefs.whisperApiKey.getValue() },
-                getModel = { prefs.whisperModel.getValue() },
-                getLanguage = { prefs.whisperLanguage.getValue() },
-            )
-            VoiceBackendType.LALM -> LALMBackend(
-                getUrl = { prefs.lalmUrl.getValue() },
-                getApiKey = { prefs.lalmApiKey.getValue() },
-                getModel = { prefs.lalmModel.getValue() },
-                getSystemPrompt = { prefs.lalmSystemPrompt.getValue() },
-                getAudioFormat = { prefs.lalmAudioFormat.getValue() },
-                getTemperature = { prefs.lalmTemperature.getValue() },
-            )
-            VoiceBackendType.Subscription -> SubscriptionBackend(
-                getGatewayUrl = { prefs.subscriptionGatewayUrl.getValue() },
-                getAccessToken = { prefs.subscriptionAccessToken.getValue() },
-                getRefreshToken = { prefs.subscriptionRefreshToken.getValue() },
-                onTokensUpdated = { access, refresh ->
-                    prefs.subscriptionAccessToken.setValue(access)
-                    prefs.subscriptionRefreshToken.setValue(refresh)
-                },
-                onSessionExpired = {
-                    prefs.subscriptionAccessToken.setValue("")
-                    prefs.subscriptionRefreshToken.setValue("")
-                },
-            )
+        return when (prefs.backendType.getValue()) {
+            VoiceBackendType.OpenCode -> openCodeBackend
+            VoiceBackendType.Whisper -> whisperBackend
+            VoiceBackendType.LALM -> lalmBackend
+            VoiceBackendType.Subscription -> subscriptionBackend
         }
     }
 
     private var activeOperationJob: Job? = null
 
     enum class StartResult {
-        STARTED, ALREADY_ACTIVE, NO_PERMISSION
+        STARTED, ALREADY_ACTIVE, NO_PERMISSION, NO_INPUT, SENSITIVE_INPUT
     }
+
+    private data class InputTarget(
+        val connection: InputConnection,
+        val packageName: String?,
+        val inputType: Int,
+        val hintText: String?,
+    )
+
+    private var cachedTarget: InputTarget? = null
+    private var cachedScreenshotRequestId: Long? = null
 
     fun startRecording(): StartResult {
         if (activeOperationJob?.isActive == true) {
@@ -113,32 +138,46 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
             return StartResult.NO_PERMISSION
         }
 
+        if (isSensitiveInput()) return StartResult.SENSITIVE_INPUT
+
+        val connection = service.currentInputConnection ?: return StartResult.NO_INPUT
+        val editorInfo = service.currentInputEditorInfo
+        val target = InputTarget(
+            connection,
+            editorInfo.packageName,
+            editorInfo.inputType,
+            editorInfo.hintText?.toString()?.trim()?.takeIf { it.isNotEmpty() },
+        )
+
         // Clear previous cache when starting a new recording
         cachedAudio = null
+        cachedTarget = target
         _state.value = State.RECORDING
 
         // Trigger screenshot capture while recording (async, will be ready by transcription time)
         // Only if the user has enabled the screenshot setting
-        if (prefs.screenScreenshot.getValue()) {
+        val screenshotRequestId = if (prefs.screenScreenshot.getValue()) {
             ScreenTextProvider.requestScreenshot()
         } else {
-            ScreenTextProvider.updateScreenshot(null)
+            ScreenTextProvider.clearScreenshot()
+            null
         }
+        cachedScreenshotRequestId = screenshotRequestId
 
         activeOperationJob = service.lifecycleScope.launch {
             try {
                 val wavBytes = audioRecorder.recordUntil()
                 if (wavBytes.isNotEmpty()) {
-                    transcribeAudio(wavBytes)
+                    transcribeAudio(wavBytes, target, screenshotRequestId)
                 } else {
-                    _state.value = State.IDLE
+                    resetToIdle()
                 }
             } catch (e: CancellationException) {
                 Timber.d("HoldToTalk recording cancelled")
                 throw e
             } catch (e: Exception) {
                 Timber.e(e, "HoldToTalk recording error")
-                _state.value = State.IDLE
+                resetToIdle()
             }
         }
         return StartResult.STARTED
@@ -152,8 +191,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         activeOperationJob?.cancel()
         activeOperationJob = null
         audioRecorder.stopRecording()
-        cachedAudio = null
-        _state.value = State.IDLE
+        resetToIdle()
     }
 
     /**
@@ -162,10 +200,16 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
      */
     fun retry(): Boolean {
         val audio = cachedAudio ?: return false
+        val target = cachedTarget ?: return false
+        if (!isCurrentTarget(target)) {
+            dismissRetry()
+            return false
+        }
+        val screenshotRequestId = cachedScreenshotRequestId
         if (activeOperationJob?.isActive == true) return false
         activeOperationJob = service.lifecycleScope.launch {
             try {
-                transcribeAudio(audio)
+                transcribeAudio(audio, target, screenshotRequestId)
             } catch (e: CancellationException) {
                 Timber.d("HoldToTalk retry cancelled")
                 throw e
@@ -176,20 +220,22 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
 
     /** Discard cached audio and return to idle */
     fun dismissRetry() {
-        cachedAudio = null
-        _state.value = State.IDLE
+        resetToIdle()
     }
 
     /** Cancel an in-progress transcription */
     fun cancelTranscription() {
         activeOperationJob?.cancel()
         activeOperationJob = null
-        cachedAudio = null
-        _state.value = State.IDLE
+        resetToIdle()
         Timber.d("Transcription cancelled by user")
     }
 
-    private suspend fun transcribeAudio(audioBytes: ByteArray) {
+    private suspend fun transcribeAudio(
+        audioBytes: ByteArray,
+        target: InputTarget,
+        screenshotRequestId: Long?,
+    ) {
         _state.value = State.TRANSCRIBING
         val startTime = System.currentTimeMillis()
         val audioSize = audioBytes.size.toLong()
@@ -197,22 +243,26 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         val audioDurationSec = ((audioSize - 44).toFloat() / 32000f).coerceAtLeast(0f)
 
         try {
+            if (!isCurrentTarget(target)) {
+                resetToIdle()
+                return
+            }
             val backend = createBackend()
-            val ic = service.currentInputConnection
-            val selectedText = when (backend) {
+            val ic = target.connection
+            val selectedText = if (prefs.surroundingTextContext.getValue()) when (backend) {
                 is LALMBackend -> if (prefs.lalmVoiceEdit.getValue()) {
-                    ic?.getSelectedText(0)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    ic.getSelectedText(0)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
                 } else null
                 is OpenCodeBackend -> if (prefs.opencodeVoiceEdit.getValue()) {
-                    ic?.getSelectedText(0)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    ic.getSelectedText(0)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
                 } else null
-                is SubscriptionBackend -> ic?.getSelectedText(0)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                is SubscriptionBackend -> ic.getSelectedText(0)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
                 else -> null
-            }
+            } else null
             Timber.d("editMode: backend=${backend.name}, selectedText=${if (selectedText != null) "${selectedText.length} chars" else "null"}")
-            val prompt = buildPrompt(selectedText != null)
+            val prompt = buildPrompt(selectedText != null, target)
             val screenshot = if (prefs.screenScreenshot.getValue()) {
-                ScreenTextProvider.screenshotBase64
+                ScreenTextProvider.awaitScreenshot(screenshotRequestId)
             } else null
             Timber.d("screenshot: ${if (screenshot != null) "${screenshot.length} chars" else "null"}")
             val result = backend.transcribe(audioBytes, "audio/wav", prompt, selectedText, screenshot)
@@ -220,21 +270,21 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
             val durationMs = System.currentTimeMillis() - startTime
 
             result.onSuccess { transcriptionResult ->
+                if (!isCurrentTarget(target)) {
+                    resetToIdle()
+                    return@onSuccess
+                }
                 val text = transcriptionResult.text
                 // Save successful transcription record
                 saveRecord(
                     backendType = backend.name,
-                    prompt = prompt ?: "",
                     editMode = selectedText != null,
-                    selectedText = selectedText ?: "",
                     resultText = text,
                     success = true,
                     errorMessage = "",
                     durationMs = durationMs,
-                    rawResponseBody = transcriptionResult.rawResponseBody,
                     audioDurationSec = audioDurationSec,
                     audioSizeBytes = audioSize,
-                    screenshotBase64 = screenshot ?: "",
                 )
 
                 if (text.isNotBlank()) {
@@ -244,105 +294,112 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                     lastTranscribeStart = cursorPos
                     lastTranscribeEnd = cursorPos + text.length
                     cachedCurrentText = null
-                    Timber.d("autoHotword: recorded transcription '$text' at [$lastTranscribeStart, $lastTranscribeEnd]")
+                    Timber.d("autoHotword: recorded transcription range [$lastTranscribeStart, $lastTranscribeEnd]")
 
                     service.commitText(text)
-                    cachedAudio = null
-                    _state.value = State.IDLE
+                    resetToIdle()
                     listener?.onSuccess(text)
                 } else {
                     // Empty transcription — cache for retry
                     cachedAudio = audioBytes
+                    cachedTarget = target
+                    cachedScreenshotRequestId = screenshotRequestId
                     _state.value = State.RETRY_AVAILABLE
                     listener?.onEmptyResult()
                 }
             }.onFailure { error ->
-                Timber.e(error, "Transcription failed (${backend.name})")
+                if (!isCurrentTarget(target)) {
+                    resetToIdle()
+                    return@onFailure
+                }
+                val errorMessage = userFacingError(error)
+                Timber.w("Transcription failed (${backend.name}): ${error.javaClass.simpleName}")
                 // Save failed transcription record
                 saveRecord(
                     backendType = backend.name,
-                    prompt = prompt ?: "",
                     editMode = selectedText != null,
-                    selectedText = selectedText ?: "",
                     resultText = "",
                     success = false,
-                    errorMessage = error.message ?: "Transcription failed",
+                    errorMessage = errorMessage,
                     durationMs = durationMs,
-                    rawResponseBody = "",
                     audioDurationSec = audioDurationSec,
                     audioSizeBytes = audioSize,
-                    screenshotBase64 = screenshot ?: "",
                 )
                 // Cache for retry
                 cachedAudio = audioBytes
+                cachedTarget = target
+                cachedScreenshotRequestId = screenshotRequestId
                 _state.value = State.RETRY_AVAILABLE
-                listener?.onError(error.message ?: "Transcription failed")
+                listener?.onError(errorMessage)
             }
         } catch (e: CancellationException) {
             Timber.d("Transcription cancelled")
             throw e
         } catch (e: Exception) {
+            if (!isCurrentTarget(target)) {
+                resetToIdle()
+                return
+            }
             val durationMs = System.currentTimeMillis() - startTime
-            Timber.e(e, "Transcription error")
+            val errorMessage = userFacingError(e)
+            Timber.w("Transcription error: ${e.javaClass.simpleName}")
             saveRecord(
                 backendType = prefs.backendType.getValue().name,
-                prompt = "",
                 editMode = false,
-                selectedText = "",
                 resultText = "",
                 success = false,
-                errorMessage = e.message ?: "Transcription error",
+                errorMessage = errorMessage,
                 durationMs = durationMs,
-                rawResponseBody = "",
                 audioDurationSec = audioDurationSec,
                 audioSizeBytes = audioSize,
             )
             cachedAudio = audioBytes
+            cachedTarget = target
+            cachedScreenshotRequestId = screenshotRequestId
             _state.value = State.RETRY_AVAILABLE
-            listener?.onError(e.message ?: "Transcription error")
+            listener?.onError(errorMessage)
         }
     }
 
     private fun saveRecord(
         backendType: String,
-        prompt: String,
         editMode: Boolean,
-        selectedText: String,
         resultText: String,
         success: Boolean,
         errorMessage: String,
         durationMs: Long,
-        rawResponseBody: String,
         audioDurationSec: Float,
         audioSizeBytes: Long,
-        screenshotBase64: String = "",
     ) {
+        if (!prefs.saveHistory.getValue()) return
         try {
             val record = TranscriptionRecord(
                 backendType = backendType,
-                prompt = prompt,
+                prompt = "",
                 editMode = editMode,
-                selectedText = selectedText,
+                selectedText = "",
                 resultText = resultText,
                 success = success,
                 errorMessage = errorMessage,
                 durationMs = durationMs,
-                rawResponseBody = rawResponseBody,
+                rawResponseBody = "",
                 audioDurationSec = audioDurationSec,
                 audioSizeBytes = audioSizeBytes,
-                screenshotBase64 = screenshotBase64,
+                screenshotBase64 = "",
             )
             service.lifecycleScope.launch(Dispatchers.IO) {
-                TranscriptionHistoryManager.insert(record)
+                try {
+                    TranscriptionHistoryManager.insert(record)
+                } catch (e: Exception) {
+                    Timber.w("Failed to save transcription record: ${e.javaClass.simpleName}")
+                }
             }
         } catch (e: Exception) {
             Timber.w(e, "Failed to save transcription record")
         }
     }
 
-    private fun describeInputFieldType(): String? {
-        val info = service.currentInputEditorInfo ?: return null
-        val type = info.inputType
+    private fun describeInputFieldType(type: Int): String? {
         val cls = type and InputType.TYPE_MASK_CLASS
         val variation = type and InputType.TYPE_MASK_VARIATION
 
@@ -372,9 +429,8 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         }
     }
 
-    private fun getAppName(): String? {
-        val info = service.currentInputEditorInfo ?: return null
-        val packageName = info.packageName ?: return null
+    private fun getAppName(packageName: String?): String? {
+        packageName ?: return null
         return try {
             val appInfo = service.packageManager.getApplicationInfo(packageName, 0)
             service.packageManager.getApplicationLabel(appInfo).toString()
@@ -383,26 +439,9 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         }
     }
 
-    private fun getHintText(): String? {
-        val info = service.currentInputEditorInfo ?: return null
-        return info.hintText?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-    }
-
-    private fun buildPrompt(editMode: Boolean = false): String? {
-        val ic = service.currentInputConnection ?: return null
+    private fun buildPrompt(editMode: Boolean, target: InputTarget): String? {
+        val ic = target.connection
         val parts = mutableListOf<String>()
-
-        // App name
-        val appName = getAppName()
-        if (appName != null) {
-            parts.add("<app>$appName</app>")
-        }
-
-        // Input field hint/placeholder
-        val hintText = getHintText()
-        if (hintText != null) {
-            parts.add("<hint>$hintText</hint>")
-        }
 
         // Hotwords — merge manual and auto-learned lists
         val manualHotwords = prefs.hotwords.getValue().trim()
@@ -416,41 +455,84 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
             parts.add("<hotwords>${allHotwords.joinToString(" ")}</hotwords>")
         }
 
-        val fieldType = describeInputFieldType()
-        if (fieldType != null) {
-            parts.add("<input_field_type>$fieldType</input_field_type>")
-        }
-
-        val before = ic.getTextBeforeCursor(1000, 0)?.toString()?.trim()
-        val selected = if (editMode) null else ic.getSelectedText(0)?.toString()?.trim()
-        val after = ic.getTextAfterCursor(500, 0)?.toString()?.trim()
-        val surrounding = listOfNotNull(before, selected, after)
-            .filter { it.isNotEmpty() }
-            .joinToString("")
-        if (surrounding.isNotEmpty()) {
-            parts.add("<surrounding_text>\n$surrounding\n</surrounding_text>")
+        var surrounding = ""
+        if (prefs.surroundingTextContext.getValue()) {
+            getAppName(target.packageName)?.let { parts.add("<app>$it</app>") }
+            target.hintText?.let { parts.add("<hint>$it</hint>") }
+            describeInputFieldType(target.inputType)?.let {
+                parts.add("<input_field_type>$it</input_field_type>")
+            }
+            val before = ic.getTextBeforeCursor(1000, 0)?.toString()?.trim()
+            val selected = if (editMode) null else ic.getSelectedText(0)?.toString()?.trim()
+            val after = ic.getTextAfterCursor(500, 0)?.toString()?.trim()
+            surrounding = listOfNotNull(before, selected, after)
+                .filter { it.isNotEmpty() }
+                .joinToString("")
+            if (surrounding.isNotEmpty()) {
+                parts.add("<surrounding_text>\n$surrounding\n</surrounding_text>")
+            }
         }
 
         // Add screen context from accessibility service (if enabled)
-        val screenText = ScreenTextProvider.screenText
-        Timber.d("ScreenTextProvider: enabled=${ScreenTextProvider.isEnabled}, textLen=${screenText.length}, isNotBlank=${screenText.isNotBlank()}, surroundingLen=${surrounding.length}")
-        if (screenText.isNotBlank() && screenText != surrounding) {
-            Timber.d("ScreenText added to prompt")
-            parts.add("<visible_screen_text>\n$screenText\n</visible_screen_text>")
+        if (prefs.screenTextContext.getValue()) {
+            val screenText = ScreenTextProvider.getScreenText(target.packageName)
+            if (screenText.isNotBlank() && screenText != surrounding) {
+                parts.add("<visible_screen_text>\n$screenText\n</visible_screen_text>")
+            }
         }
 
         // Add clipboard content as context
-        val clipboardText = ClipboardManager.lastEntry?.text?.trim()
-        if (!clipboardText.isNullOrEmpty()) {
-            parts.add("<clipboard_content>\n${clipboardText.take(1000)}\n</clipboard_content>")
+        if (prefs.clipboardContext.getValue()) {
+            val clipboardEntry = ClipboardManager.lastEntry
+            val clipboardText = clipboardEntry?.takeUnless { it.sensitive }?.text?.trim()
+            if (!clipboardText.isNullOrEmpty()) {
+                parts.add("<clipboard_content>\n${clipboardText.take(1000)}\n</clipboard_content>")
+            }
         }
 
         val result = if (parts.isNotEmpty()) parts.joinToString("\n") else null
         Timber.d("buildPrompt: ${parts.size} parts, totalLen=${result?.length ?: 0}")
-        parts.forEachIndexed { i, part ->
-            Timber.d("buildPrompt part[$i] len=${part.length}: ${part.take(500)}")
-        }
         return result
+    }
+
+    private fun isCurrentTarget(target: InputTarget): Boolean {
+        return service.currentInputConnection === target.connection &&
+            service.currentInputEditorInfo.packageName == target.packageName
+    }
+
+    private fun resetToIdle() {
+        cachedAudio = null
+        cachedTarget = null
+        cachedScreenshotRequestId = null
+        ScreenTextProvider.clearScreenshot()
+        _state.value = State.IDLE
+    }
+
+    private fun userFacingError(error: Throwable): String {
+        return (error as? TranscriptionException)?.message?.takeIf { it.isNotBlank() }
+            ?: service.getString(R.string.voice_input_error)
+    }
+
+    private fun isSensitiveInput(): Boolean {
+        val info = service.currentInputEditorInfo
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            info.imeOptions and android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
+        ) {
+            return true
+        }
+        val inputType = info.inputType
+        return when (inputType and InputType.TYPE_MASK_CLASS) {
+            InputType.TYPE_CLASS_TEXT -> when (inputType and InputType.TYPE_MASK_VARIATION) {
+                InputType.TYPE_TEXT_VARIATION_PASSWORD,
+                InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD -> true
+                else -> false
+            }
+            InputType.TYPE_CLASS_NUMBER ->
+                inputType and InputType.TYPE_MASK_VARIATION ==
+                    InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            else -> false
+        }
     }
 
     /**
@@ -509,8 +591,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         if (currContent == origContent) return
 
         Timber.d("autoHotword: flush detected edit")
-        Timber.d("autoHotword: original='$original'")
-        Timber.d("autoHotword: current='$current'")
+        Timber.d("autoHotword: comparing original and edited text")
 
         val hotwordCandidates = extractHotwords(original, current)
         if (hotwordCandidates.isEmpty()) return

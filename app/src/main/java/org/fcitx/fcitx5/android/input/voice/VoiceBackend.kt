@@ -5,16 +5,15 @@
 package org.fcitx.fcitx5.android.input.voice
 
 import kotlinx.coroutines.CancellationException
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * Result of a voice transcription call.
  *
  * @param text the transcribed text
- * @param rawResponseBody the raw JSON response body from the backend API
  */
 data class TranscriptionResult(
     val text: String,
-    val rawResponseBody: String,
 )
 
 /**
@@ -53,4 +52,19 @@ internal suspend fun <T> runTranscriptionCatching(block: suspend () -> T): Resul
     } catch (e: Throwable) {
         Result.failure(e)
     }
+}
+
+internal fun requireConfigured(value: String?, label: String): String {
+    return value?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw TranscriptionException("$label not configured")
+}
+
+internal fun requireSecureBaseUrl(value: String?, label: String): String {
+    val configured = requireConfigured(value, label).trimEnd('/')
+    val url = configured.toHttpUrlOrNull()
+        ?: throw TranscriptionException("Invalid $label")
+    if (!url.isHttps) {
+        throw TranscriptionException("$label must use HTTPS")
+    }
+    return configured
 }

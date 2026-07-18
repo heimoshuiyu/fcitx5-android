@@ -56,7 +56,10 @@ class TranscriptionDetailFragment : Fragment() {
             }
 
             if (record == null) {
-                view.findViewById<TextView>(R.id.text_error)?.text = "Record not found"
+                view.findViewById<TextView>(R.id.text_error)?.apply {
+                    setText(R.string.transcription_record_not_found)
+                    visibility = View.VISIBLE
+                }
                 return@launch
             }
 
@@ -67,22 +70,34 @@ class TranscriptionDetailFragment : Fragment() {
                 dateFormat.format(Date(record.timestamp))
 
             view.findViewById<TextView>(R.id.text_backend)?.text =
-                record.backendType + if (record.editMode) " (edit mode)" else ""
+                if (record.editMode) {
+                    getString(R.string.transcription_backend_edit, record.backendType)
+                } else {
+                    record.backendType
+                }
 
             view.findViewById<TextView>(R.id.text_duration)?.text =
-                "${record.durationMs}ms"
+                getString(R.string.transcription_duration_ms, record.durationMs)
 
             view.findViewById<TextView>(R.id.text_audio_info)?.text =
-                "${record.audioDurationSec.toInt()}s / ${record.audioSizeBytes / 1024}KB"
+                getString(
+                    R.string.transcription_audio_info,
+                    record.audioDurationSec.toInt(),
+                    record.audioSizeBytes / 1024,
+                )
 
             view.findViewById<TextView>(R.id.text_status)?.text =
-                if (record.success) "✓ Success" else "✗ ${record.errorMessage}"
+                if (record.success) {
+                    getString(R.string.transcription_success)
+                } else {
+                    record.errorMessage.ifBlank { getString(R.string.transcription_failed) }
+                }
 
             view.findViewById<TextView>(R.id.text_result)?.text =
-                record.resultText.ifBlank { "(empty)" }
+                record.resultText.ifBlank { getString(R.string.transcription_value_empty) }
 
             view.findViewById<TextView>(R.id.text_prompt)?.text =
-                record.prompt.ifBlank { "(none)" }
+                record.prompt.ifBlank { getString(R.string.transcription_value_none) }
 
             if (record.selectedText.isNotEmpty()) {
                 view.findViewById<View>(R.id.section_selected_text)?.visibility = View.VISIBLE
@@ -113,7 +128,9 @@ class TranscriptionDetailFragment : Fragment() {
                     val element = Json.parseToJsonElement(record.rawResponseBody)
                     prettyJson.encodeToString(JsonObject.serializer(), element as JsonObject)
                 } catch (_: Exception) {
-                    record.rawResponseBody.ifBlank { "(not available)" }
+                    record.rawResponseBody.ifBlank {
+                        getString(R.string.transcription_value_not_available)
+                    }
                 }
         }
     }

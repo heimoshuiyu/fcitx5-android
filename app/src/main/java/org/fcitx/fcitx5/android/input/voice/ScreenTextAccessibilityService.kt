@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.input.voice
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
@@ -14,6 +15,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
 
@@ -38,6 +40,7 @@ class ScreenTextAccessibilityService : AccessibilityService() {
         const val MAX_DEPTH = 30
         const val MAX_TEXT_NODES = 200
         const val SCREENSHOT_QUALITY = 60
+        const val MAX_SCREENSHOT_DIMENSION = 1280
     }
 
     override fun onServiceConnected() {
@@ -48,11 +51,18 @@ class ScreenTextAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+        if (!AppPrefs.getInstance().voiceInput.screenTextContext.getValue()) {
+            pendingTraversal?.let { handler.removeCallbacks(it) }
+            pendingTraversal = null
+            ScreenTextProvider.updateText(emptyMap())
+            return
+        }
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 scheduleTraversal()
             }
+            else -> Unit
         }
     }
 
@@ -66,6 +76,11 @@ class ScreenTextAccessibilityService : AccessibilityService() {
         Timber.d("ScreenTextAccessibilityService destroyed")
     }
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        ScreenTextProvider.onServiceDisabled()
+        return super.onUnbind(intent)
+    }
+
     private fun scheduleTraversal() {
         pendingTraversal?.let { handler.removeCallbacks(it) }
         val runnable = Runnable { traverseAndCollect() }
@@ -75,48 +90,46 @@ class ScreenTextAccessibilityService : AccessibilityService() {
 
     private fun traverseAndCollect() {
         pendingTraversal = null
-        val texts = mutableListOf<String>()
 
         // Use getWindows() to iterate all visible windows,
         // not getRootInActiveWindow() which returns the keyboard when IME is visible.
         val windows = windows
         if (windows.isNullOrEmpty()) {
             Timber.d("ScreenText: no windows returned")
+            ScreenTextProvider.updateText(emptyMap())
             return
         }
 
         Timber.d("ScreenText: ${windows.size} windows")
+        val textsByPackage = mutableMapOf<String, MutableList<String>>()
         for (window in windows) {
             val type = window.type
             // Skip IME windows (type 2) and system windows we don't care about
             if (type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
                 Timber.d("ScreenText: skipping IME window")
-                window.recycle()
                 continue
             }
             // Only process application windows
             if (type != AccessibilityWindowInfo.TYPE_APPLICATION) {
                 Timber.d("ScreenText: skipping window type=$type")
-                window.recycle()
                 continue
             }
 
             val root = window.root
             if (root != null) {
-                val before = texts.size
-                collectTextRecursive(root, texts, depth = 0)
-                Timber.d("ScreenText: app window contributed ${texts.size - before} text nodes")
-                root.recycle()
+                val packageName = root.packageName?.toString() ?: continue
+                val packageTexts = textsByPackage.getOrPut(packageName) { mutableListOf() }
+                val before = packageTexts.size
+                collectTextRecursive(root, packageTexts, depth = 0)
+                Timber.d("ScreenText: app window contributed ${packageTexts.size - before} text nodes")
             }
-            window.recycle()
         }
 
-        val joined = texts.filter { it.isNotBlank() }.joinToString("\n")
-        Timber.d("ScreenText collected ${texts.size} text nodes, ${joined.length} chars total")
-        if (joined.isNotBlank()) {
-            Timber.d("ScreenText content:\n$joined")
+        val collected = textsByPackage.mapValues { (_, texts) ->
+            texts.filter { it.isNotBlank() }.joinToString("\n")
         }
-        ScreenTextProvider.updateText(joined)
+        Timber.d("ScreenText collected ${collected.size} application contexts")
+        ScreenTextProvider.updateText(collected)
     }
 
     private fun collectTextRecursive(
@@ -125,7 +138,8 @@ class ScreenTextAccessibilityService : AccessibilityService() {
         depth: Int
     ) {
         if (depth > MAX_DEPTH) return
-        if (texts.size > MAX_TEXT_NODES) return
+        if (texts.size >= MAX_TEXT_NODES) return
+        if (node.isPassword) return
 
         node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let {
             texts.add(it)
@@ -145,7 +159,6 @@ class ScreenTextAccessibilityService : AccessibilityService() {
             try {
                 node.getChild(i)?.let { child ->
                     collectTextRecursive(child, texts, depth + 1)
-                    child.recycle()
                 }
             } catch (_: Exception) {
                 // Skip inaccessible children
@@ -159,7 +172,7 @@ class ScreenTextAccessibilityService : AccessibilityService() {
      *
      * Must be called on the main thread (handler post).
      */
-    fun takeScreenshot(): Boolean {
+    fun takeScreenshot(requestId: Long): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             Timber.d("Screenshot: API ${Build.VERSION.SDK_INT} < 30, not supported")
             return false
@@ -172,21 +185,35 @@ class ScreenTextAccessibilityService : AccessibilityService() {
                 object : TakeScreenshotCallback {
                     override fun onSuccess(screenshot: ScreenshotResult) {
                         try {
-                            val bitmap = Bitmap.wrapHardwareBuffer(
+                            val hardwareBitmap = Bitmap.wrapHardwareBuffer(
                                 screenshot.hardwareBuffer,
                                 screenshot.colorSpace
-                            )?.let { hwBitmap ->
-                                // Convert to software bitmap for JPEG compression
-                                Bitmap.createBitmap(hwBitmap)
-                            }
+                            )
+                            val sourceBitmap = hardwareBitmap?.copy(
+                                Bitmap.Config.ARGB_8888,
+                                false,
+                            )
+                            hardwareBitmap?.recycle()
 
-                            if (bitmap == null) {
+                            if (sourceBitmap == null) {
                                 Timber.w("Screenshot: failed to create bitmap")
-                                ScreenTextProvider.updateScreenshot(null)
+                                ScreenTextProvider.updateScreenshot(requestId, null)
                                 return
                             }
 
-                            // Compress to JPEG (no scaling — original resolution)
+                            val largestDimension = maxOf(sourceBitmap.width, sourceBitmap.height)
+                            val bitmap = if (largestDimension > MAX_SCREENSHOT_DIMENSION) {
+                                val scale = MAX_SCREENSHOT_DIMENSION.toFloat() / largestDimension
+                                Bitmap.createScaledBitmap(
+                                    sourceBitmap,
+                                    (sourceBitmap.width * scale).toInt(),
+                                    (sourceBitmap.height * scale).toInt(),
+                                    true,
+                                ).also { sourceBitmap.recycle() }
+                            } else {
+                                sourceBitmap
+                            }
+
                             val stream = ByteArrayOutputStream()
                             bitmap.compress(Bitmap.CompressFormat.JPEG, SCREENSHOT_QUALITY, stream)
                             val bmpWidth = bitmap.width
@@ -197,10 +224,13 @@ class ScreenTextAccessibilityService : AccessibilityService() {
                             val base64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
 
                             Timber.d("Screenshot: captured ${jpegBytes.size} bytes JPEG, ${base64.length} chars base64, ${bmpWidth}x${bmpHeight}")
-                            ScreenTextProvider.updateScreenshot("data:image/jpeg;base64,$base64")
+                            ScreenTextProvider.updateScreenshot(
+                                requestId,
+                                "data:image/jpeg;base64,$base64",
+                            )
                         } catch (e: Exception) {
                             Timber.e(e, "Screenshot: processing failed")
-                            ScreenTextProvider.updateScreenshot(null)
+                            ScreenTextProvider.updateScreenshot(requestId, null)
                         } finally {
                             screenshot.hardwareBuffer.close()
                         }
@@ -215,7 +245,7 @@ class ScreenTextAccessibilityService : AccessibilityService() {
                             else -> "UNKNOWN_$errorCode"
                         }
                         Timber.w("Screenshot: failed with $errorName ($errorCode)")
-                        ScreenTextProvider.updateScreenshot(null)
+                        ScreenTextProvider.updateScreenshot(requestId, null)
                     }
                 }
             )
