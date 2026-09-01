@@ -7,10 +7,7 @@ package org.fcitx.fcitx5.android.input.voice
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -18,10 +15,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.coroutines.executeAsync
 import java.util.concurrent.TimeUnit
-import timber.log.Timber
 
 /**
- * OpenCode server backend — POST to /voice/transcribe with Basic Auth.
+ * OpenCode v2 server backend — POST to /api/voice/transcribe with Basic Auth.
  * The server routes to its configured backend (Whisper or LALM internally).
  */
 class OpenCodeBackend(
@@ -32,11 +28,6 @@ class OpenCodeBackend(
 ) : VoiceBackend {
 
     override val name = "OpenCode"
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = false
-    }
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -61,52 +52,33 @@ class OpenCodeBackend(
             val modelStr = getModel()?.trim()
 
             val voice = if (selectedText != null) {
-                // Edit mode: override system, prompt, and instruction for text editing
-                val editSystem = "You are a text editing assistant. The user has selected some text and will give you a voice instruction on how to edit it. " +
-                    "Execute the instruction precisely. Output ONLY the edited result text, no explanations, no markdown formatting, no quotes."
-                val editPrompt = "<SELECTED_TEXT>\n$selectedText\n</SELECTED_TEXT>"
-                val editInstruction = "Execute the voice instruction on the selected text. Output ONLY the edited text, nothing else."
-                val lalmOverride = LalmVoiceOverride(
-                    system = editSystem,
-                    prompt = editPrompt,
-                    instruction = editInstruction,
-                    model = if (!modelStr.isNullOrEmpty()) {
-                        val slashIdx = modelStr.indexOf('/')
-                        if (slashIdx > 0) LalmModelOverride(modelStr.substring(0, slashIdx), modelStr.substring(slashIdx + 1))
-                        else null
-                    } else null,
-                )
-                VoiceOverride(type = "lalm", lalm = lalmOverride)
+                // Edit mode: override system and instruction for text editing
+                buildEditVoiceSettings(modelStr)
             } else if (!modelStr.isNullOrEmpty()) {
-                // Normal mode: just override model
-                val slashIdx = modelStr.indexOf('/')
-                if (slashIdx > 0) {
-                    VoiceOverride(lalm = LalmVoiceOverride(model = LalmModelOverride(modelStr.substring(0, slashIdx), modelStr.substring(slashIdx + 1))))
+                // Normal mode: "provider/model" selects a LALM model, a bare
+                // name selects a Whisper model.
+                if (modelStr.contains('/')) {
+                    VoiceSettings(lalm = LalmSettings(model = modelStr))
                 } else {
-                    VoiceOverride(whisper = WhisperVoiceOverride(model = modelStr))
+                    VoiceSettings(whisper = WhisperSettings(model = modelStr))
                 }
             } else null
 
-            // In edit mode, wrap context into the prompt field
-            val requestPrompt = if (selectedText != null && !prompt.isNullOrBlank()) {
-                "<TRANSCRIPTION_CONTEXT>\n$prompt\n</TRANSCRIPTION_CONTEXT>"
-            } else prompt
-
-            val request = TranscribeRequest(
+            val request = VoiceTranscribeRequest(
                 audio = audioBase64,
                 mime = mime,
-                prompt = requestPrompt,
+                prompt = buildVoicePrompt(prompt, selectedText),
                 voice = voice,
                 images = if (!imageBase64.isNullOrEmpty()) listOf(imageBase64) else null,
             )
 
-            val requestBody = json.encodeToString(request)
+            val requestBody = voiceApiJson.encodeToString(request)
                 .toRequestBody("application/json".toMediaType())
 
             val authHeader = buildAuthHeader()
 
             val httpRequest = Request.Builder()
-                .url("$baseUrl/voice/transcribe")
+                .url("$baseUrl/api/voice/transcribe")
                 .post(requestBody)
                 .apply {
                     if (authHeader != null) {
@@ -117,7 +89,9 @@ class OpenCodeBackend(
 
             httpClient.newCall(httpRequest).executeAsync().use { response ->
                 if (!response.isSuccessful) {
-                    throw TranscriptionException("Server error: ${response.code}")
+                    throw TranscriptionException(
+                        parseErrorMessage(response.body.string(), response.code)
+                    )
                 }
 
                 val responseBody = response.body.string()
@@ -125,8 +99,10 @@ class OpenCodeBackend(
                     throw TranscriptionException("Empty response from server")
                 }
 
-                val result = json.decodeFromString<TranscribeResponse>(responseBody)
-                TranscriptionResult(text = result.text)
+                val result = voiceApiJson.decodeFromString<VoiceTranscribeResponse>(responseBody)
+                val text = result.data?.text
+                    ?: throw TranscriptionException("Malformed response from server")
+                TranscriptionResult(text = text)
             }
         }
     }
@@ -136,63 +112,11 @@ class OpenCodeBackend(
         val username = getAuthUsername()
         return Credentials.basic(username, password)
     }
+
+    private fun parseErrorMessage(errorBody: String, statusCode: Int): String {
+        val message = runCatching {
+            voiceApiJson.decodeFromString<VoiceErrorResponse>(errorBody).message
+        }.getOrNull()
+        return message?.takeIf { it.isNotBlank() } ?: "Server error: $statusCode"
+    }
 }
-
-// === OpenCode API Models ===
-
-@kotlinx.serialization.Serializable
-data class TranscribeRequest(
-    val audio: String,
-    val mime: String,
-    val prompt: String? = null,
-    @kotlinx.serialization.SerialName("sessionID")
-    val sessionID: String? = null,
-    val voice: VoiceOverride? = null,
-    val images: List<String>? = null,
-)
-
-@kotlinx.serialization.Serializable
-data class VoiceOverride(
-    val type: String? = null,
-    val whisper: WhisperVoiceOverride? = null,
-    val lalm: LalmVoiceOverride? = null,
-)
-
-@kotlinx.serialization.Serializable
-data class WhisperVoiceOverride(
-    val url: String? = null,
-    val apiKey: String? = null,
-    val model: String? = null,
-    val language: String? = null,
-)
-
-@kotlinx.serialization.Serializable
-data class LalmVoiceOverride(
-    val model: LalmModelOverride? = null,
-    val prompt: String? = null,
-    val system: String? = null,
-    val instruction: String? = null,
-    val audioInputFormat: String? = null,
-)
-
-@kotlinx.serialization.Serializable
-data class LalmModelOverride(
-    val providerID: String,
-    val modelID: String,
-)
-
-@kotlinx.serialization.Serializable
-data class TranscribeResponse(
-    val text: String,
-)
-
-@kotlinx.serialization.Serializable
-data class TranscribeError(
-    val name: String,
-    val data: ErrorData? = null,
-)
-
-@kotlinx.serialization.Serializable
-data class ErrorData(
-    val message: String,
-)

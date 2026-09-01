@@ -10,7 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -20,15 +19,15 @@ import java.util.concurrent.TimeUnit
 import timber.log.Timber
 
 /**
- * Subscription backend — sends requests to the subscription gateway.
- * Compatible with OpenCode Voice Transcription SDK format, but only
- * sends audio, context (prompt), and instruction.
- * System prompt and voice overrides are controlled server-side.
+ * Subscription backend — sends requests to the subscription gateway using the
+ * opencode v2 voice transcription format (`POST /api/voice/transcribe`).
+ * Without a voice override the gateway applies the user's server-side
+ * transcription configuration; edit mode sends a LALM editing override.
  *
  * Token lifecycle:
  * - Access token: 1 hour (server-configured)
  * - Refresh token: 30 days
- * - On 401 / invalid_token, automatically refreshes using refresh_token
+ * - On 401 / UnauthorizedError, automatically refreshes using refresh_token
  *   and retries the original request once.
  */
 class SubscriptionBackend(
@@ -40,11 +39,6 @@ class SubscriptionBackend(
 ) : VoiceBackend {
 
     override val name = "Subscription"
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = false
-    }
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -85,7 +79,7 @@ class SubscriptionBackend(
 
                 val body = response.body.string()
                 if (body.isEmpty()) return null
-                val tokenResponse = json.decodeFromString<TokenResponse>(body)
+                val tokenResponse = voiceApiJson.decodeFromString<TokenResponse>(body)
                 TokenRefreshResult(
                     accessToken = requireConfigured(
                         tokenResponse.access_token,
@@ -105,24 +99,34 @@ class SubscriptionBackend(
     }
 
     /**
-     * Parse error from response body. Returns error code and message.
+     * Parse a v2 error response `{_tag, message}`. Returns the tag and a
+     * user-facing message.
      */
     private fun parseError(errorBody: String?, statusCode: Int): Pair<String?, String> {
-        return try {
-            val wrapped = json.decodeFromString<SubscriptionErrorWrapper>(errorBody ?: "")
-            val detail = wrapped.detail
-            when {
-                detail != null && detail.error == "quota_exceeded" ->
-                    detail.error to "Monthly usage limit exceeded. Please upgrade your plan."
-                detail != null && detail.error == "invalid_token" ->
-                    detail.error to "Session expired. Please sign in again."
-                detail != null && detail.error != null ->
-                    detail.error to "Server error: $statusCode"
-                else -> null to "Server error: $statusCode"
-            }
-        } catch (_: Exception) {
-            null to "Server error: $statusCode"
+        val error = runCatching {
+            voiceApiJson.decodeFromString<VoiceErrorResponse>(errorBody ?: "")
+        }.getOrNull()
+        val tag = error?.tag
+        return when (tag) {
+            "QuotaExceededError" ->
+                tag to "Monthly usage limit exceeded. Please upgrade your plan."
+            "UnauthorizedError" ->
+                tag to "Session expired. Please sign in again."
+            null -> null to "Server error: $statusCode"
+            else -> tag to (error.message?.takeIf { it.isNotBlank() } ?: "Server error: $statusCode")
         }
+    }
+
+    private fun parseSuccess(body: String): TranscriptionResult {
+        if (body.isEmpty()) {
+            throw TranscriptionException("Empty response from server")
+        }
+        val result = runCatching {
+            voiceApiJson.decodeFromString<VoiceTranscribeResponse>(body)
+        }.getOrNull() ?: throw TranscriptionException("Malformed response from server")
+        val text = result.data?.text
+            ?: throw TranscriptionException("Malformed response from server")
+        return TranscriptionResult(text = text)
     }
 
     override suspend fun transcribe(
@@ -141,62 +145,38 @@ class SubscriptionBackend(
             )
             val audioBase64 = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
 
-            // Build instruction for edit mode
-            val instruction = if (selectedText != null) {
-                "Execute the voice instruction on the selected text. Output ONLY the edited text, nothing else."
-            } else null
-
-            // Build prompt: in edit mode, wrap context + selected text
-            val requestPrompt = when {
-                selectedText != null -> {
-                    val parts = mutableListOf<String>()
-                    if (!prompt.isNullOrBlank()) {
-                        parts.add("<TRANSCRIPTION_CONTEXT>\n$prompt\n</TRANSCRIPTION_CONTEXT>")
-                    }
-                    parts.add("<SELECTED_TEXT>\n$selectedText\n</SELECTED_TEXT>")
-                    parts.joinToString("\n")
-                }
-                else -> prompt
-            }
-
-            val request = SubscriptionTranscribeRequest(
+            // Edit mode sends a LALM editing override; normal mode leaves the
+            // voice unset so the gateway applies the user's configuration.
+            val request = VoiceTranscribeRequest(
                 audio = audioBase64,
                 mime = mime,
-                prompt = requestPrompt,
-                instruction = instruction,
+                prompt = buildVoicePrompt(prompt, selectedText),
+                voice = if (selectedText != null) buildEditVoiceSettings() else null,
                 images = if (!imageBase64.isNullOrEmpty()) listOf(imageBase64) else null,
             )
 
-            val requestBody = json.encodeToString(request)
+            val requestBody = voiceApiJson.encodeToString(request)
                 .toRequestBody("application/json".toMediaType())
 
             val httpRequest = Request.Builder()
-                .url("$baseUrl/voice/transcribe")
+                .url("$baseUrl/api/voice/transcribe")
                 .post(requestBody)
                 .addHeader("Authorization", "Bearer $token")
                 .build()
 
-            val (errorCode, errorMessage) = httpClient
+            val (errorTag, errorMessage) = httpClient
                 .newCall(httpRequest)
                 .executeAsync()
                 .use { response ->
                     if (response.isSuccessful) {
-                        val responseBody = response.body.string()
-                        if (responseBody.isEmpty()) {
-                            throw TranscriptionException("Empty response from server")
-                        }
-
-                        val result = json.decodeFromString<TranscribeResponse>(responseBody)
-                        return@runTranscriptionCatching TranscriptionResult(
-                            text = result.text,
-                        )
+                        return@runTranscriptionCatching parseSuccess(response.body.string())
                     }
 
                     parseError(response.body.string(), response.code)
                 }
 
-            // Auto-refresh on invalid_token (expired access token)
-            if (errorCode == "invalid_token") {
+            // Auto-refresh on UnauthorizedError (expired access token)
+            if (errorTag == "UnauthorizedError") {
                 Timber.d("[$name] Access token expired, attempting refresh...")
                 val refreshed = refreshTokens(baseUrl)
                 if (refreshed != null) {
@@ -206,7 +186,7 @@ class SubscriptionBackend(
 
                     // Retry the original request with new access token
                     val retryRequest = Request.Builder()
-                        .url("$baseUrl/voice/transcribe")
+                        .url("$baseUrl/api/voice/transcribe")
                         .post(requestBody)
                         .addHeader("Authorization", "Bearer ${refreshed.accessToken}")
                         .build()
@@ -223,12 +203,7 @@ class SubscriptionBackend(
                                 throw TranscriptionException(retryErrorMessage)
                             }
 
-                            val retryBody = retryResponse.body.string()
-                            if (retryBody.isEmpty()) {
-                                throw TranscriptionException("Empty response from server")
-                            }
-                            val result = json.decodeFromString<TranscribeResponse>(retryBody)
-                            TranscriptionResult(text = result.text)
+                            parseSuccess(retryResponse.body.string())
                         }
                 }
 
@@ -248,38 +223,10 @@ private data class TokenRefreshResult(
     val refreshToken: String,
 )
 
-@kotlinx.serialization.Serializable
+@Serializable
 private data class TokenResponse(
     val access_token: String,
     val refresh_token: String? = null,
     val token_type: String = "Bearer",
     val expires_in: Int = 3600,
-)
-
-@kotlinx.serialization.Serializable
-data class SubscriptionTranscribeRequest(
-    val audio: String,
-    val mime: String,
-    val prompt: String? = null,
-    val instruction: String? = null,
-    val images: List<String>? = null,
-)
-
-@kotlinx.serialization.Serializable
-data class SubscriptionErrorDetail(
-    val error: String? = null,
-    val error_description: String? = null,
-    val message: String? = null,
-)
-
-@kotlinx.serialization.Serializable
-data class SubscriptionErrorWrapper(
-    val detail: SubscriptionErrorDetail? = null,
-)
-
-@kotlinx.serialization.Serializable
-data class SubscriptionError(
-    val error: String? = null,
-    val error_description: String? = null,
-    val detail: String? = null,
 )
