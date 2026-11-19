@@ -11,11 +11,11 @@ import kotlinx.serialization.json.put
 /**
  * Catalog of Console-hosted models usable for voice transcription. The
  * authenticated inference model list decides what is usable and carries the
- * audio/chat capabilities; the workspace config only refines an entry with
- * its base URL, headers, body overlays and variants — a regular member's
- * config contains overlays, not the full model list, so catalog models
- * absent from the config are served on the default base URL with the
- * default variant.
+ * audio/chat capabilities; the managed provider's config entry only refines
+ * a model with its base URL, headers, body overlays and variants — a
+ * regular member's config contains overlays, not the full model list, so
+ * catalog models absent from the config are served on the default base URL
+ * with the default variant.
  *
  * The first successful fetch is cached in memory; transcription reuses it
  * and only refetches after [reset] (sign-in/sign-out) or process restart.
@@ -71,10 +71,12 @@ object ConsoleCatalog {
 
     /**
      * Build the selectable entries from the inference model list, joined with
-     * the workspace config where it has something to say about a model. The
-     * config is an overlay source, not a gate: an audio-capable model it
-     * never mentions is still offered. Only a config entry explicitly marking
-     * the model disabled excludes it.
+     * the managed provider's config entry where it has something to say about
+     * a model. The list serves the managed OpenCode connection, so the
+     * workspace's other (BYOK) providers never affect it — not even a model
+     * they mark disabled. The managed entry is an overlay source, not a
+     * gate: an audio-capable model it never mentions is still offered; only
+     * an entry marking the model disabled excludes it.
      *
      * Each entry carries the protocol the app can drive and the base URL for
      * it: a config overlay wins, else the model's models.dev route for that
@@ -84,14 +86,17 @@ object ConsoleCatalog {
         config: ConsoleApi.ConfigDocument,
         models: List<ConsoleApi.InferenceModel>,
     ): List<ModelEntry> {
+        // `/inference/v1/models` serves the managed OpenCode connection, so
+        // only that provider's entries refine these models. Flattening every
+        // provider's models into one map would let a BYOK provider's disabled
+        // flag or overlays hide or redirect a managed model.
+        val managed = config.providers[ConsoleApi.MANAGED_PROVIDER_KEY]
         val configModels = HashMap<String, Pair<ConsoleApi.ConsoleProvider, ConsoleApi.ConsoleModel>>()
-        config.providers.values.forEach { provider ->
-            provider.models?.forEach { (key, model) ->
-                val id = model.modelID?.takeIf { it.isNotBlank() } ?: key
-                // Disabled entries stay in the map so the filter below can
-                // see the workspace's explicit choice.
-                configModels[id] = provider to model
-            }
+        managed?.models?.forEach { (key, model) ->
+            val id = model.modelID?.takeIf { it.isNotBlank() } ?: key
+            // Disabled entries stay in the map so the filter below can
+            // exclude them.
+            configModels[id] = managed to model
         }
         return models.asSequence()
             // Chat models publish `type: "chat"` in models.dev v2; other kinds

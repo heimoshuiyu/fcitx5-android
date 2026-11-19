@@ -79,6 +79,53 @@ class ConsoleCatalogTest {
     }
 
     @Test
+    fun catalogIgnoresByokProviderForManagedModels() {
+        val config = ConsoleApi.ConfigDocument(
+            providers = mapOf(
+                // A workspace BYOK Google connection: its own route, credentials
+                // and an entry marking the same model disabled there. The
+                // Console emits `disabled: true` whenever a model is not
+                // enabled on that connection.
+                "console-google" to ConsoleApi.ConsoleProvider(
+                    name = "Google",
+                    settings = buildJsonObject { put("baseURL", "https://byok.example.com/google/v1beta") },
+                    headers = mapOf("x-goog-api-key" to "byok-key"),
+                    body = buildJsonObject { put("temperature", 0.9) },
+                    models = mapOf(
+                        "gemini-3.8-flash" to ConsoleApi.ConsoleModel(
+                            modelID = "gemini-3.8-flash",
+                            disabled = true,
+                        )
+                    ),
+                ),
+                // The managed connection: no overlay for the model.
+                "opencode" to ConsoleApi.ConsoleProvider(name = "OpenCode"),
+            )
+        )
+        val entries = ConsoleCatalog.buildEntries(
+            config,
+            listOf(
+                model(
+                    "gemini-3.8-flash",
+                    api = mapOf(
+                        "generate-content" to buildJsonObject {
+                            put("base_url", "https://opencode.ai/inference/google/v1beta")
+                        }
+                    ),
+                )
+            ),
+        )
+        // The BYOK entry does not hide the managed model.
+        assertEquals(listOf("gemini-3.8-flash"), entries.map { it.id })
+        val resolved = ConsoleCatalog.resolve(entries.single(), "")
+        // The managed route wins: the models.dev base URL, not the BYOK one.
+        assertEquals("https://opencode.ai/inference/google/v1beta", resolved.baseUrl)
+        // No BYOK headers or body leak into the managed request.
+        assertEquals(emptyMap<String, String>(), resolved.headers)
+        assertTrue(resolved.bodyOverlay.isEmpty())
+    }
+
+    @Test
     fun catalogDrivesGoogleGenerateContentModels() {
         val config = config()
         val entries = ConsoleCatalog.buildEntries(

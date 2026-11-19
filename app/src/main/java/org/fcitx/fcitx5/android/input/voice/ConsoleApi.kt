@@ -42,6 +42,13 @@ object ConsoleApi {
     const val DEFAULT_GOOGLE_BASE = "$INFERENCE_BASE/google/v1beta"
     const val CLIENT_ID = "fcitx5-android"
 
+    /**
+     * The config `providers` key of the managed OpenCode connection that
+     * serves [INFERENCE_BASE]. The workspace's other config providers are
+     * its own (BYOK) connections, keyed by their own ids.
+     */
+    const val MANAGED_PROVIDER_KEY = "opencode"
+
     /** The protocol key of OpenAI-compatible chat completions in models.dev v2 feeds. */
     const val CHAT_COMPLETIONS_PROTOCOL = "chat-completions"
 
