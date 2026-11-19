@@ -80,7 +80,11 @@ class SetupActivity : FragmentActivity() {
         prevButton.visibility = if (isFirstPage) View.GONE else View.VISIBLE
         skipButton.visibility = if (allDone) View.GONE else View.VISIBLE
         nextButton.text = getString(if (isLastPage) R.string.done else R.string.next)
-        nextButton.visibility = if (isLastPage && !allDone) View.GONE else View.VISIBLE
+        // The last page is the informational voice page; its Done button is
+        // always available, even if the required pages are still undone.
+        nextButton.visibility = if (isLastPage && !allDone &&
+            viewPager.currentItem != SetupPage.Voice.ordinal
+        ) View.GONE else View.VISIBLE
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

@@ -31,12 +31,16 @@ class SetupFragment : Fragment() {
     // called on window focus changed
     fun sync() {
         val done = page.isDone()
+        // The informational voice page always offers its action button and
+        // never shows a "done" state, even though isDone() is always true.
+        val informational = page == SetupPage.Voice
         with(binding) {
             hintText.text = page.getHintText(requireContext())
-            actionButton.visibility = if (done) View.GONE else View.VISIBLE
+            actionButton.visibility = if (done && !informational) View.GONE else View.VISIBLE
             actionButton.text = page.getButtonText(requireContext())
             actionButton.setOnClickListener { page.getButtonAction(requireContext()) }
-            doneText.visibility = if (done) View.VISIBLE else View.GONE
+            doneIcon.visibility = if (done && !informational) View.VISIBLE else View.GONE
+            doneText.visibility = if (done && !informational) View.VISIBLE else View.GONE
         }
     }
 

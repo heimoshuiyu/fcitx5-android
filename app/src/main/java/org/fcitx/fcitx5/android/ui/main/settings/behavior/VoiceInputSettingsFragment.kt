@@ -28,6 +28,7 @@ import org.fcitx.fcitx5.android.input.voice.ConsoleApi
 import org.fcitx.fcitx5.android.input.voice.ConsoleCatalog
 import org.fcitx.fcitx5.android.input.voice.ConsoleSession
 import org.fcitx.fcitx5.android.input.voice.ScreenTextProvider
+import org.fcitx.fcitx5.android.input.voice.VoiceBackendType
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
 
@@ -43,6 +44,19 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
     override fun onPreferenceUiCreated(screen: PreferenceScreen) {
         val context = screen.context
+
+        // Setup guidance shown on top while the Console backend has no
+        // usable configuration yet (same condition as the IME's pre-check).
+        val guidancePref = Preference(context).apply {
+            key = "voice_setup_guidance"
+            isPersistent = false
+            isSelectable = false
+            order = -2
+            title = context.getString(R.string.voice_setup_guidance_title)
+            summary = context.getString(R.string.voice_setup_guidance_summary)
+            isVisible = !isConsoleBackendConfigured()
+        }
+        screen.addPreference(guidancePref)
 
         // Transcription History entry point — add at top (order = -1)
         val historyPref = Preference(context).apply {
@@ -146,10 +160,23 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
     // --- OpenCode Console: account ---
 
+    /**
+     * The Console backend has a usable configuration (signed in and a model
+     * selected). Mirrors the pre-check in HoldToTalkController.startRecording.
+     */
+    private fun isConsoleBackendConfigured(): Boolean {
+        if (prefs.backendType.getValue() != VoiceBackendType.Console) return true
+        return prefs.consoleAccessToken.getValue().isNotBlank() &&
+            prefs.consoleModelId.getValue().isNotBlank()
+    }
+
     private fun isSignedIn(): Boolean = prefs.consoleAccessToken.getValue().isNotBlank()
 
     private fun updateConsoleEntries() {
         val screen = preferenceScreen ?: return
+        screen.findPreference<Preference>("voice_setup_guidance")?.let {
+            it.isVisible = !isConsoleBackendConfigured()
+        }
         screen.findPreference<Preference>("console_account")?.let(::updateAccountPref)
         screen.findPreference<Preference>("console_model")?.let(::updateModelPref)
         screen.findPreference<Preference>("console_variant")?.let(::updateVariantPref)

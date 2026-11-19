@@ -105,7 +105,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
     private var activeOperationJob: Job? = null
 
     enum class StartResult {
-        STARTED, ALREADY_ACTIVE, NO_PERMISSION, NO_INPUT, SENSITIVE_INPUT
+        STARTED, ALREADY_ACTIVE, NOT_CONFIGURED, NO_PERMISSION, NO_INPUT, SENSITIVE_INPUT
     }
 
     private data class InputTarget(
@@ -122,6 +122,16 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         if (activeOperationJob?.isActive == true) {
             Timber.w("HoldToTalk already active")
             return StartResult.ALREADY_ACTIVE
+        }
+
+        // Guide the user to the voice settings before recording anything
+        // when the selected backend has no usable configuration yet.
+        if (prefs.backendType.getValue() == VoiceBackendType.Console &&
+            (prefs.consoleAccessToken.getValue().isBlank() ||
+                prefs.consoleModelId.getValue().isBlank())
+        ) {
+            Timber.w("Console backend not configured")
+            return StartResult.NOT_CONFIGURED
         }
 
         if (service.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)

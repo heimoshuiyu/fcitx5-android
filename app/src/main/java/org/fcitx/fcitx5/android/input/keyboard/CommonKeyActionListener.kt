@@ -46,6 +46,7 @@ import org.fcitx.fcitx5.android.input.voice.FloatingVoiceIndicator
 import org.fcitx.fcitx5.android.input.voice.HoldToTalkController
 import org.fcitx.fcitx5.android.input.voice.MicrophonePermissionActivity
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
+import org.fcitx.fcitx5.android.utils.AppUtil
 import org.fcitx.fcitx5.android.utils.switchToNextIME
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
@@ -283,6 +284,15 @@ class CommonKeyActionListener :
                     addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 service.startActivity(intent)
+            }
+            HoldToTalkController.StartResult.NOT_CONFIGURED -> {
+                cleanupHoldToTalk()
+                Toast.makeText(
+                    service,
+                    R.string.voice_input_not_configured,
+                    Toast.LENGTH_SHORT
+                ).show()
+                AppUtil.launchMainToVoiceInput(service)
             }
             HoldToTalkController.StartResult.ALREADY_ACTIVE -> {
                 // Already recording, ignore

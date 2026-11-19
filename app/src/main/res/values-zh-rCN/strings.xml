@@ -28,6 +28,8 @@
     <string name="enable_ime_hint">在“语言和输入法设置”中启用&lt;b>%1$s&lt;/b></string>
     <string name="select_ime">选择输入法</string>
     <string name="select_ime_hint">选择&lt;b>%1$s&lt;/b>作为默认输入法</string>
+    <string name="setup_voice">设置语音输入</string>
+    <string name="setup_voice_hint">长按&lt;b>空格键&lt;/b>说话，松开即转写。使用前请在语音输入设置中登录 OpenCode。</string>
     <string name="next">下一步</string>
     <string name="prev">上一步</string>
     <string name="done">完成</string>
@@ -361,6 +363,7 @@
     <string name="voice_input_release_to_transcribe">松开空格键开始转录</string>
     <string name="voice_input_transcribing">正在转录…</string>
     <string name="voice_input_error">转录失败</string>
+    <string name="voice_input_not_configured">请先在语音输入设置中登录 OpenCode 并选择模型</string>
     <string name="voice_input_empty">未检测到语音</string>
     <string name="voice_input_retry">重试</string>
     <string name="voice_input_cancel">取消</string>
@@ -372,6 +375,8 @@
     <string name="voice_input_auto_hotwords_list_summary">根据您的修正自动学习的热词。</string>
     <string name="voice_input_history">转录历史</string>
     <string name="voice_input_history_summary">查看保存在本机的转录结果和请求元数据。</string>
+    <string name="voice_setup_guidance_title">完成语音输入设置</string>
+    <string name="voice_setup_guidance_summary">第一步：在下方登录 OpenCode Console 并选择模型。第二步（可选）：在下方开启屏幕文本或截图上下文；需要先在系统设置中授权无障碍服务，点击下方状态项可跳转。</string>
     <string name="transcription_history_empty">暂无转录记录</string>
     <string name="transcription_history_clear_title">清空历史</string>
     <string name="transcription_history_clear_message">确定删除所有转录记录吗？</string>

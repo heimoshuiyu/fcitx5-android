@@ -28,6 +28,8 @@
     <string name="enable_ime_hint">Enable &lt;b>%1$s&lt;/b> in Language and input settings</string>
     <string name="select_ime">Select Input Method</string>
     <string name="select_ime_hint">Select &lt;b>%1$s&lt;/b> as your default input method</string>
+    <string name="setup_voice">Set up voice input</string>
+    <string name="setup_voice_hint">Hold the &lt;b>space key&lt;/b> to speak, release it to transcribe. Sign in to OpenCode in voice input settings to use it.</string>
     <string name="next">Next</string>
     <string name="prev">Prev</string>
     <string name="done">Done</string>
@@ -362,6 +364,7 @@
     <string name="voice_input_release_to_transcribe">Release the space key to transcribe</string>
     <string name="voice_input_transcribing">Transcribing…</string>
     <string name="voice_input_error">Transcription failed</string>
+    <string name="voice_input_not_configured">Sign in to OpenCode and select a model in voice input settings</string>
     <string name="voice_input_empty">No speech detected</string>
     <string name="voice_input_retry">Retry</string>
     <string name="voice_input_cancel">Cancel</string>
@@ -373,6 +376,8 @@
     <string name="voice_input_auto_hotwords_list_summary">Words automatically learned from your corrections.</string>
     <string name="voice_input_history">Transcription History</string>
     <string name="voice_input_history_summary">View locally stored transcription results and request metadata.</string>
+    <string name="voice_setup_guidance_title">Finish voice input setup</string>
+    <string name="voice_setup_guidance_summary">Step 1: sign in to OpenCode Console below and select a model. Step 2 (optional): enable screen text or screenshot context below; that requires the accessibility service in system Settings, tap the status item below to open it.</string>
     <string name="transcription_history_empty">No transcription records yet</string>
     <string name="transcription_history_clear_title">Clear history</string>
     <string name="transcription_history_clear_message">Delete all transcription records?</string>

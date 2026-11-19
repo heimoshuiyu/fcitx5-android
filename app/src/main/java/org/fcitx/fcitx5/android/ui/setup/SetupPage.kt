@@ -7,33 +7,42 @@ package org.fcitx.fcitx5.android.ui.setup
 import android.content.Context
 import androidx.core.text.HtmlCompat
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.utils.AppUtil
 import org.fcitx.fcitx5.android.utils.InputMethodUtil
 
 enum class SetupPage {
-    Enable, Select;
+    Enable, Select, Voice;
 
-    fun getHintText(context: Context) = context.getString(
-        when (this) {
-            Enable -> R.string.enable_ime_hint
-            Select -> R.string.select_ime_hint
-        }, context.getString(R.string.app_name)
-    ).let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_LEGACY) }
+    fun getHintText(context: Context) = when (this) {
+        Enable -> context.getString(R.string.enable_ime_hint, context.getString(R.string.app_name))
+        Select -> context.getString(R.string.select_ime_hint, context.getString(R.string.app_name))
+        Voice -> context.getString(R.string.setup_voice_hint)
+    }.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_LEGACY) }
 
     fun getButtonText(context: Context) = context.getText(
         when (this) {
             Enable -> R.string.enable_ime
             Select -> R.string.select_ime
+            Voice -> R.string.setup_voice
         }
     )
 
     fun getButtonAction(context: Context) = when (this) {
         Enable -> InputMethodUtil.startSettingsActivity(context)
         Select -> InputMethodUtil.showPicker()
+        Voice -> AppUtil.launchMainToVoiceInput(context)
     }
 
+    /**
+     * The voice page is informational and optional: it never blocks the
+     * wizard, so it is always considered done and must not trigger the
+     * setup notification or keep [SetupActivity.shouldShowUp] returning
+     * true for users who have already finished the other pages.
+     */
     fun isDone() = when (this) {
         Enable -> InputMethodUtil.isEnabled()
         Select -> InputMethodUtil.isSelected()
+        Voice -> true
     }
 
     companion object {
