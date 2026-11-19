@@ -20,13 +20,18 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase
 import org.fcitx.fcitx5.android.input.keyboard.LangSwitchBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SwipeSymbolDirection
+import org.fcitx.fcitx5.android.input.voice.LalmAudioFormat
+import org.fcitx.fcitx5.android.input.voice.VoiceBackendType
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.EmojiModifier
 import org.fcitx.fcitx5.android.utils.DeviceUtil
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.vibrator
 
-class AppPrefs(private val sharedPreferences: SharedPreferences) {
+class AppPrefs(
+    private val sharedPreferences: SharedPreferences,
+    private val securePreferences: SharedPreferences,
+) {
 
     inner class Internal : ManagedPreferenceInternal(sharedPreferences) {
         val firstRun = bool("first_run", true)
@@ -371,6 +376,238 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         )
     }
 
+    inner class VoiceInput : ManagedPreferenceCategory(R.string.voice_input, sharedPreferences) {
+        val backendType = enumList(
+            R.string.voice_input_backend,
+            "voice_input_backend_type",
+            VoiceBackendType.Console
+        )
+
+        val saveHistory = switch(
+            R.string.voice_input_save_history,
+            "voice_input_save_history",
+            false,
+            R.string.voice_input_save_history_summary,
+        )
+
+        val surroundingTextContext = switch(
+            R.string.voice_input_surrounding_text,
+            "voice_input_surrounding_text",
+            false,
+            R.string.voice_input_surrounding_text_summary,
+        )
+
+        val clipboardContext = switch(
+            R.string.voice_input_clipboard_context,
+            "voice_input_clipboard_context",
+            false,
+            R.string.voice_input_clipboard_context_summary,
+        )
+
+        val screenTextContext = switch(
+            R.string.voice_input_screen_text,
+            "voice_input_screen_text",
+            false,
+            R.string.voice_input_screen_text_summary,
+        )
+
+        // Hotwords (shared across all backends)
+        val hotwords = editText(
+            R.string.voice_input_hotwords,
+            "voice_input_hotwords",
+            "",
+            multiline = true
+        )
+
+        // Auto hotwords
+        val autoHotwords = switch(
+            R.string.voice_input_auto_hotwords,
+            "voice_input_auto_hotwords",
+            false,
+            R.string.voice_input_auto_hotwords_summary
+        )
+        val autoHotwordsList = editText(
+            R.string.voice_input_auto_hotwords_list,
+            "voice_input_auto_hotwords_list",
+            "",
+            multiline = true
+        )
+
+        // OpenCode Console backend. Tokens are credentials, kept in secure storage;
+        // the remaining values are internal, driven by pickers in the settings UI.
+        val consoleAccessToken = ManagedPreference.PSecureString(
+            securePreferences,
+            "voice_input_console_access_token",
+            "",
+            sharedPreferences,
+        ).apply { register() }
+        val consoleRefreshToken = ManagedPreference.PSecureString(
+            securePreferences,
+            "voice_input_console_refresh_token",
+            "",
+            sharedPreferences,
+        ).apply { register() }
+        val consoleOrgId = ManagedPreference.PString(sharedPreferences, "voice_input_console_org_id", "").apply { register() }
+        val consoleModelId = ManagedPreference.PString(sharedPreferences, "voice_input_console_model_id", "").apply { register() }
+        val consoleVariantId = ManagedPreference.PString(sharedPreferences, "voice_input_console_variant_id", "").apply { register() }
+
+        // Whisper backend
+        val whisperUrl = editText(
+            R.string.voice_input_whisper_url,
+            "voice_input_whisper_url",
+            "https://api.openai.com/v1"
+        )
+        val whisperApiKey = secureEditText(
+            R.string.voice_input_whisper_api_key,
+            "voice_input_whisper_api_key",
+            "",
+            securePreferences,
+        )
+        val whisperModel = editText(
+            R.string.voice_input_whisper_model,
+            "voice_input_whisper_model",
+            "whisper-1"
+        )
+        val whisperLanguage = editText(
+            R.string.voice_input_whisper_language,
+            "voice_input_whisper_language",
+            ""
+        )
+
+        // LALM backend
+        val lalmUrl = editText(
+            R.string.voice_input_lalm_url,
+            "voice_input_lalm_url",
+            "https://api.openai.com/v1"
+        )
+        val lalmApiKey = secureEditText(
+            R.string.voice_input_lalm_api_key,
+            "voice_input_lalm_api_key",
+            "",
+            securePreferences,
+        )
+        val lalmModel = editText(
+            R.string.voice_input_lalm_model,
+            "voice_input_lalm_model",
+            ""
+        )
+        val lalmSystemPrompt = editText(
+            R.string.voice_input_lalm_system_prompt,
+            "voice_input_lalm_system_prompt",
+            ""
+        )
+        val lalmAudioFormat = enumList(
+            R.string.voice_input_lalm_audio_format,
+            "voice_input_lalm_audio_format",
+            LalmAudioFormat.InputAudio
+        )
+        val lalmTemperature = editText(
+            R.string.voice_input_lalm_temperature,
+            "voice_input_lalm_temperature",
+            ""
+        )
+        val lalmVoiceEdit = switch(
+            R.string.voice_input_lalm_voice_edit,
+            "voice_input_lalm_voice_edit",
+            true,
+            R.string.voice_input_lalm_voice_edit_summary
+        )
+
+        // Screenshot context
+        val screenScreenshot = switch(
+            R.string.voice_input_screen_screenshot,
+            "voice_input_screen_screenshot",
+            false,
+            R.string.voice_input_screen_screenshot_summary
+        )
+
+        override fun createUi(screen: androidx.preference.PreferenceScreen) {
+            val ctx = screen.context
+
+            // General section (backend type + hotwords)
+            val generalCategory = addCategory(screen, R.string.voice_input_general, listOf(
+                "voice_input_backend_type", "voice_input_hotwords",
+                "voice_input_auto_hotwords", "voice_input_auto_hotwords_list",
+                "voice_input_save_history", "voice_input_surrounding_text",
+                "voice_input_clipboard_context"
+            ), ctx)
+            // Set custom summaries
+            generalCategory.findPreference<androidx.preference.Preference>("voice_input_hotwords")?.let {
+                it.summaryProvider = null
+                it.summary = ctx.getString(R.string.voice_input_hotwords_summary)
+            }
+            generalCategory.findPreference<androidx.preference.Preference>("voice_input_auto_hotwords_list")?.let {
+                it.summaryProvider = null
+                it.summary = ctx.getString(R.string.voice_input_auto_hotwords_list_summary)
+            }
+
+            // Whisper section
+            addCategory(screen, R.string.voice_backend_whisper, listOf(
+                "voice_input_whisper_url", "voice_input_whisper_api_key",
+                "voice_input_whisper_model", "voice_input_whisper_language"
+            ), ctx)
+
+            // LALM section
+            addCategory(screen, R.string.voice_backend_lalm, listOf(
+                "voice_input_lalm_url", "voice_input_lalm_api_key",
+                "voice_input_lalm_model", "voice_input_lalm_system_prompt",
+                "voice_input_lalm_audio_format", "voice_input_lalm_temperature",
+                "voice_input_lalm_voice_edit"
+            ), ctx)
+        }
+
+        private fun addCategory(
+            screen: androidx.preference.PreferenceScreen,
+            @androidx.annotation.StringRes title: Int,
+            keys: List<String>,
+            ctx: android.content.Context
+        ): androidx.preference.PreferenceCategory {
+            val category = androidx.preference.PreferenceCategory(ctx).apply {
+                setTitle(title)
+                isIconSpaceReserved = false
+            }
+            screen.addPreference(category)
+            keys.forEach { key ->
+                managedPreferencesUi.find { it.key == key }?.let { ui ->
+                    category.addPreference(ui.createUi(ctx))
+                }
+            }
+            return category
+        }
+
+        fun migrateSecureValues() {
+            listOf(
+                whisperApiKey,
+                lalmApiKey,
+                consoleAccessToken,
+                consoleRefreshToken,
+            ).forEach { it.getValue() }
+            // Idempotent cleanup of credentials left by removed backends
+            // (direct OpenCode server and the retired subscription gateway).
+            cleanupLegacyKeys(
+                "voice_input_auth_password",
+                "voice_input_subscription_access_token",
+                "voice_input_subscription_refresh_token",
+                "voice_input_oauth_code_verifier",
+                "voice_input_oauth_state",
+                "voice_input_server_url",
+                "voice_input_auth_username",
+                "voice_input_opencode_model",
+                "voice_input_opencode_voice_edit",
+                "voice_input_subscription_gateway_url",
+            )
+        }
+
+        private fun cleanupLegacyKeys(vararg keys: String) {
+            keys.forEach { key ->
+                if (securePreferences.contains(key) || sharedPreferences.contains(key)) {
+                    securePreferences.edit { remove(key) }
+                    sharedPreferences.edit { remove(key) }
+                }
+            }
+        }
+    }
+
     private val providers = mutableListOf<ManagedPreferenceProvider>()
 
     fun <T : ManagedPreferenceProvider> registerProvider(
@@ -390,6 +627,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
     val candidates = Candidates().register()
     val clipboard = Clipboard().register()
     val symbols = Symbols().register()
+    val voiceInput = VoiceInput().register()
     val advanced = Advanced().register()
 
     @Keep
@@ -433,11 +671,15 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         /**
          * MUST call before use
          */
-        fun init(sharedPreferences: SharedPreferences) {
+        fun init(
+            sharedPreferences: SharedPreferences,
+            securePreferences: SharedPreferences,
+        ) {
             if (instance != null)
                 return
-            instance = AppPrefs(sharedPreferences)
+            instance = AppPrefs(sharedPreferences, securePreferences)
             sharedPreferences.registerOnSharedPreferenceChangeListener(getInstance().onSharedPreferenceChangeListener)
+            securePreferences.registerOnSharedPreferenceChangeListener(getInstance().onSharedPreferenceChangeListener)
         }
 
         fun getInstance() = instance!!

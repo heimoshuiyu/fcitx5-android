@@ -57,6 +57,14 @@ abstract class BaseKeyboard(
 
     private val spaceSwipeMoveCursor = prefs.keyboard.spaceSwipeMoveCursor
     private val spaceKeys = mutableListOf<KeyView>()
+
+    /**
+     * Tracks whether a space key long-press is currently in "hold to talk" mode,
+     * so that ACTION_UP can dispatch the stop action.
+     */
+    @Volatile
+    private var holdToTalkActive = false
+
     private val spaceSwipeChangeListener = ManagedPreference.OnChangeListener<Boolean> { _, v ->
         spaceKeys.forEach {
             it.swipeEnabled = v
@@ -172,6 +180,13 @@ abstract class BaseKeyboard(
                                 true
                             }
                         }
+                        GestureType.Up -> {
+                            if (holdToTalkActive) {
+                                onAction(KeyAction.HoldToTalkAction(start = false))
+                                holdToTalkActive = false
+                            }
+                            false
+                        }
                         else -> false
                     }
                 }
@@ -207,7 +222,14 @@ abstract class BaseKeyboard(
                     }
                     is KeyDef.Behavior.LongPress -> {
                         setOnLongClickListener { _ ->
-                            onAction(it.action)
+                            if (def is SpaceKey &&
+                                prefs.keyboard.spaceKeyLongPressBehavior.getValue() == SpaceLongPressBehavior.HoldToTalk
+                            ) {
+                                holdToTalkActive = true
+                                onAction(KeyAction.HoldToTalkAction(start = true))
+                            } else {
+                                onAction(it.action)
+                            }
                             true
                         }
                     }

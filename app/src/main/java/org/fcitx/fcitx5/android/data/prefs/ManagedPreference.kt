@@ -104,6 +104,56 @@ abstract class ManagedPreference<T : Any>(
         }
     }
 
+    class PSecureString(
+        sharedPreferences: SharedPreferences,
+        key: String,
+        defaultValue: String,
+        private val legacyPreferences: SharedPreferences,
+    ) : ManagedPreference<String>(sharedPreferences, key, defaultValue) {
+
+        override fun setValue(value: String) {
+            sharedPreferences.edit {
+                putString(
+                    key,
+                    if (value.isEmpty()) "" else SecurePreferenceCrypto.encrypt(value),
+                )
+            }
+            if (legacyPreferences !== sharedPreferences) {
+                legacyPreferences.edit { remove(key) }
+            }
+        }
+
+        override fun getValue(): String {
+            val stored = sharedPreferences.getString(key, null)
+            if (stored != null) {
+                if (stored.isEmpty()) return defaultValue
+                return try {
+                    SecurePreferenceCrypto.decrypt(stored)
+                } catch (_: Exception) {
+                    sharedPreferences.edit { remove(key) }
+                    defaultValue
+                }
+            }
+
+            val legacy = legacyPreferences.getString(key, null) ?: return defaultValue
+            return try {
+                setValue(legacy)
+                legacy
+            } catch (_: Exception) {
+                legacyPreferences.edit { remove(key) }
+                defaultValue
+            }
+        }
+
+        override fun putValueTo(editor: SharedPreferences.Editor) {
+            val value = getValue()
+            editor.putString(
+                key,
+                if (value.isEmpty()) "" else SecurePreferenceCrypto.encrypt(value),
+            )
+        }
+    }
+
     class PStringLike<T : Any>(
         sharedPreferences: SharedPreferences,
         key: String,
@@ -174,4 +224,3 @@ abstract class ManagedPreference<T : Any>(
     }
 
 }
-

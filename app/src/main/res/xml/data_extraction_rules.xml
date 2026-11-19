@@ -2,6 +2,24 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude
+            domain="database"
+            path="transcription_db" />
+        <exclude
+            domain="database"
+            path="transcription_db-shm" />
+        <exclude
+            domain="database"
+            path="transcription_db-wal" />
+        <exclude
+            domain="database"
+            path="transcription_db-journal" />
+        <exclude
+            domain="sharedpref"
+            path="voice_credentials.xml" />
+        <exclude
+            domain="device_sharedpref"
+            path="voice_credentials.xml" />
+        <exclude
             domain="file"
             path="usr" />
         <exclude
@@ -15,6 +33,24 @@
             path="README.md" />
     </cloud-backup>
     <device-transfer>
+        <exclude
+            domain="database"
+            path="transcription_db" />
+        <exclude
+            domain="database"
+            path="transcription_db-shm" />
+        <exclude
+            domain="database"
+            path="transcription_db-wal" />
+        <exclude
+            domain="database"
+            path="transcription_db-journal" />
+        <exclude
+            domain="sharedpref"
+            path="voice_credentials.xml" />
+        <exclude
+            domain="device_sharedpref"
+            path="voice_credentials.xml" />
         <exclude
             domain="file"
             path="usr" />
