@@ -85,7 +85,7 @@ class ConsoleBackend(
 
             try {
                 ConsoleSession.withRefresh(token, { getRefreshToken() }, onTokensUpdated) { access ->
-                    val entry = ConsoleCatalog.ensure(access, orgId).find { it.id == modelId }
+                    val entry = ConsoleCatalog.findById(ConsoleCatalog.ensure(access, orgId), modelId)
                         ?: throw TranscriptionException(
                             "Model \"$modelId\" is not available. Open voice settings to choose another one."
                         )
@@ -129,17 +129,20 @@ class ConsoleBackend(
         val request = Request.Builder()
             .url(url)
             .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .header("Authorization", "Bearer $token")
-            .header("User-Agent", "fcitx5-android/${BuildConfig.VERSION_NAME}")
-            .header("x-opencode-client", "fcitx5-android")
-            .header("x-opencode-session-id", sessionId)
-            .header("x-opencode-project", "global")
-            .header("x-session-affinity", sessionId)
-            .header("X-Session-Id", sessionId)
-            .header("x-opencode-session", sessionId)
             .apply {
-                if (orgId != null) header("x-org-id", orgId)
+                // The channel's own headers first; the Console headers are set
+                // again after them, so a BYOK overlay naming the same header
+                // can never replace the credential this request rides on.
                 resolved.headers.forEach { (name, value) -> header(name, value) }
+                header("Authorization", "Bearer $token")
+                header("User-Agent", "fcitx5-android/${BuildConfig.VERSION_NAME}")
+                header("x-opencode-client", "fcitx5-android")
+                header("x-opencode-session-id", sessionId)
+                header("x-opencode-project", "global")
+                header("x-session-affinity", sessionId)
+                header("X-Session-Id", sessionId)
+                header("x-opencode-session", sessionId)
+                if (orgId != null) header("x-org-id", orgId)
             }
             .build()
 

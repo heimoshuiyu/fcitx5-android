@@ -39,4 +39,11 @@ interface TranscriptionDao {
             "rawResponseBody = '', screenshotBase64 = ''"
     )
     suspend fun redactSensitiveDetails()
+
+    /**
+     * Clear only the transcription history table; the hotword agent runs
+     * live in the same database and must survive this.
+     */
+    @Query("DELETE FROM ${TranscriptionRecord.TABLE_NAME}")
+    suspend fun deleteAllRecords()
 }

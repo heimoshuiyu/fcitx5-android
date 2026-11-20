@@ -8,10 +8,11 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [TranscriptionRecord::class],
-    version = 2,
+    entities = [TranscriptionRecord::class, HotwordAgentRun::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class TranscriptionDatabase : RoomDatabase() {
     abstract fun transcriptionDao(): TranscriptionDao
+    abstract fun hotwordAgentDao(): HotwordAgentDao
 }

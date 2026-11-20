@@ -18,6 +18,8 @@ import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.clipboard.ClipboardManager
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import org.fcitx.fcitx5.android.data.voice.HotwordAgentManager
+import org.fcitx.fcitx5.android.data.voice.HotwordSnapshotDecision
 import org.fcitx.fcitx5.android.data.voice.TranscriptionHistoryManager
 import org.fcitx.fcitx5.android.data.voice.db.TranscriptionRecord
 import org.fcitx.fcitx5.android.input.FcitxInputMethodService
@@ -288,15 +290,19 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
                 )
 
                 if (text.isNotBlank()) {
-                    // Record transcription position for auto hotword detection
+                    service.commitText(text)
+                    // Record the transcription range AFTER committing:
+                    // commitText predicts the cursor at actualInsertStart +
+                    // text.length (also when it replaced an active composing
+                    // region), so the range stays aligned in both cases.
+                    // See FcitxInputMethodService.commitText.
                     val cursorPos = service.currentInputSelection.start
                     lastTranscribedText = text
-                    lastTranscribeStart = cursorPos
-                    lastTranscribeEnd = cursorPos + text.length
+                    lastTranscribeStart = cursorPos - text.length
+                    lastTranscribeEnd = cursorPos
                     cachedCurrentText = null
                     Timber.d("autoHotword: recorded transcription range [$lastTranscribeStart, $lastTranscribeEnd]")
 
-                    service.commitText(text)
                     resetToIdle()
                     listener?.onSuccess(text)
                 } else {
@@ -538,7 +544,7 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
     /**
      * Cache the current text from the transcribed region.
      * Called on every selection update while the IME is visible.
-     * Actual diff/hotword extraction is deferred to flushAutoHotword().
+     * The last valid snapshot is used when the input completes or is wiped.
      */
     fun cacheCurrentText(newSelStart: Int, newSelEnd: Int) {
         val original = lastTranscribedText ?: return
@@ -547,6 +553,26 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         if (insertStart < 0) return
 
         val ic = service.currentInputConnection ?: return
+
+        // Whole-field wipe detection: a collapsed cursor at/before the
+        // region start with nothing before or after it means the
+        // transcribed text is gone — typically the app cleared the input
+        // after sending while the IME stays open. Decide the learning
+        // outcome now, so the stale region bounds can never capture the
+        // next message the user types into the same box, and so learning
+        // does not wait for the IME to close. An active selection (e.g.
+        // select-all) is not a wipe.
+        if (newSelStart == newSelEnd && newSelStart <= insertStart) {
+            val before = ic.getTextBeforeCursor(insertStart + 100, 0)?.toString().orEmpty()
+            if (before.isEmpty()) {
+                val afterReadLen = insertEnd - newSelStart + 100
+                val after = ic.getTextAfterCursor(afterReadLen, 0)?.toString().orEmpty()
+                if (after.isEmpty()) {
+                    finalizeWipedRegion(original)
+                    return
+                }
+            }
+        }
 
         // Read enough text to cover the region [insertStart, insertEnd]
         val readLen = insertEnd + 100
@@ -560,14 +586,48 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
         // Use the original length as a rough upper bound — the user's edit
         // may be slightly shorter or longer, so allow some slack (2x).
         val maxLen = original.length * 2
-        cachedCurrentText = textBefore.substring(regionStartInBefore,
+        var snapshot = textBefore.substring(regionStartInBefore,
             minOf(regionStartInBefore + maxLen, textBefore.length))
+        // When the cursor sits inside the region, textBefore ends at the
+        // cursor and misses the region's tail; read it after the cursor so
+        // the final-text snapshot is not truncated mid-edit.
+        if (newSelStart < insertEnd) {
+            val afterReadLen = insertEnd - newSelStart + 100
+            val textAfter = ic.getTextAfterCursor(afterReadLen, 0)?.toString().orEmpty()
+            snapshot = (snapshot + textAfter).take(maxLen)
+        }
+        // A snapshot without any letters or digits is a wiped or misaligned
+        // read (e.g. an app's clear transition), never a text state worth
+        // learning: keep the last valid snapshot instead.
+        if (HotwordSnapshotDecision.content(snapshot).isNotEmpty()) {
+            cachedCurrentText = snapshot
+        }
+    }
+
+    /**
+     * The transcribed region no longer exists in the input field. Reset all
+     * tracking (repeated selection updates and any later flush can never
+     * re-trigger learning for this transcription) and, if the last valid
+     * snapshot still carries a correction, enqueue it right away.
+     */
+    private fun finalizeWipedRegion(original: String) {
+        val snapshot = cachedCurrentText
+        resetTranscriptionTracking()
+        if (!prefs.autoHotwords.getValue()) return
+        val toLearn = HotwordSnapshotDecision.wipedSnapshotToLearn(original, snapshot)
+        if (toLearn == null) return
+        Timber.d("autoHotword: region wiped after edit, enqueuing learning run")
+        HotwordAgentManager.enqueue(original, toLearn)
     }
 
     /**
      * Called when the input view is finishing or input field is changing.
-     * Compares the last cached text with the original transcription
-     * and extracts hotwords from the diff.
+     * Hands the original transcription and the final edited text to the
+     * hotword learning agent. The learning input is persisted as a pending
+     * row before the run is attempted, so a dead process only leaves it
+     * waiting for a manual run in the records UI. An effectively-empty
+     * final (blank or letter/digit-free) never runs — the agent must never
+     * see a cleared input field as the user deleting everything they said.
      */
     fun flushAutoHotword() {
         val original = lastTranscribedText
@@ -582,140 +642,12 @@ class HoldToTalkController(private val service: FcitxInputMethodService) {
 
         if (!prefs.autoHotwords.getValue()) return
 
-        // No content change
-        if (current == original) return
+        val finalText = HotwordSnapshotDecision.flushFinalToLearn(original, current)
+        if (finalText == null) return
 
-        // Only punctuation/whitespace change
-        val origContent = original.filter { it.isLetterOrDigit() }
-        val currContent = current.filter { it.isLetterOrDigit() }
-        if (currContent == origContent) return
-
-        Timber.d("autoHotword: flush detected edit")
-        Timber.d("autoHotword: comparing original and edited text")
-
-        val hotwordCandidates = extractHotwords(original, current)
-        if (hotwordCandidates.isEmpty()) return
-
-        // Append to auto-learned hotwords (separate from manual hotwords)
-        val existingManual = prefs.hotwords.getValue().trim()
-        val manualWords = if (existingManual.isNotEmpty()) {
-            existingManual.lines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        } else emptySet()
-
-        val existingAuto = prefs.autoHotwordsList.getValue().trim()
-        val autoWords = if (existingAuto.isNotEmpty()) {
-            existingAuto.lines().map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
-        } else {
-            mutableSetOf()
-        }
-
-        var added = 0
-        for (word in hotwordCandidates) {
-            if (word.length >= 2 && !manualWords.contains(word) && !autoWords.contains(word)) {
-                autoWords.add(word)
-                added++
-            }
-        }
-
-        if (added > 0) {
-            val newAutoHotwords = autoWords.joinToString("\n")
-            prefs.autoHotwordsList.setValue(newAutoHotwords)
-            Timber.d("autoHotword: added $added auto hotwords, total=${autoWords.size}: $hotwordCandidates")
-        }
+        Timber.d("autoHotword: flush detected edit, enqueuing learning run")
+        HotwordAgentManager.enqueue(original, finalText)
     }
-
-    /**
-     * Extract hotword candidates from the diff between original and current text.
-     *
-     * Algorithm:
-     * 1. Strip punctuation/whitespace from both strings, keeping index mapping
-     * 2. Find common prefix and suffix on the stripped versions
-     * 3. The middle part of current (corrected) text is the diff
-     * 4. Extract meaningful tokens from the diff region in the original current text
-     */
-    private fun extractHotwords(original: String, current: String): List<String> {
-        // Quick sanity: if effective lengths are too different, it's a rewrite
-        val origStripped = stripToContent(original)
-        val currStripped = stripToContent(current)
-        val lenRatio = currStripped.text.length.toFloat() /
-            origStripped.text.length.toFloat().coerceAtLeast(1f)
-        if (lenRatio < 0.3f || lenRatio > 3f) return emptyList()
-
-        // Find common prefix length on stripped text
-        var prefixLen = 0
-        val minLen = minOf(origStripped.text.length, currStripped.text.length)
-        while (prefixLen < minLen &&
-            origStripped.text[prefixLen] == currStripped.text[prefixLen]
-        ) {
-            prefixLen++
-        }
-
-        // Find common suffix length (don't overlap with prefix)
-        var suffixLen = 0
-        while (suffixLen < minLen - prefixLen &&
-            origStripped.text[origStripped.text.length - 1 - suffixLen] ==
-            currStripped.text[currStripped.text.length - 1 - suffixLen]
-        ) {
-            suffixLen++
-        }
-
-        // If everything matches on content level, it's just punctuation changes — skip
-        if (prefixLen + suffixLen >= origStripped.text.length &&
-            prefixLen + suffixLen >= currStripped.text.length
-        ) {
-            return emptyList()
-        }
-
-        val unchangedLen = prefixLen + suffixLen
-
-        // If the changed portion is more than 50% of content, likely a rewrite
-        if (origStripped.text.length - unchangedLen > origStripped.text.length * 0.5f) return emptyList()
-        if (currStripped.text.length - unchangedLen > currStripped.text.length * 0.5f) return emptyList()
-
-        // Map the changed region back to indices in the original current string
-        if (prefixLen >= currStripped.strippedToOriginal.size) return emptyList()
-        val currentStart = currStripped.strippedToOriginal[prefixLen]
-        val endIndex = currStripped.text.length - suffixLen
-        val currentEnd = if (endIndex < currStripped.strippedToOriginal.size) {
-            currStripped.strippedToOriginal[endIndex]
-        } else {
-            current.length
-        }
-
-        val changedText = current.substring(currentStart, currentEnd).trim()
-        if (changedText.isEmpty()) return emptyList()
-
-        Timber.d("autoHotword: diff prefix=$prefixLen suffix=$suffixLen changed='$changedText'")
-
-        // Split the changed text by whitespace into tokens, keep meaningful ones
-        return changedText
-            .split(Regex("\\s+"))
-            .map { it.trim() }
-            .filter { it.length >= 2 }
-    }
-
-    /**
-     * Strip punctuation and whitespace from text, keeping a mapping from
-     * stripped character index back to original string index.
-     */
-    private fun stripToContent(text: String): StrippedText {
-        val content = StringBuilder()
-        val indexMap = mutableListOf<Int>()
-        for (i in text.indices) {
-            val c = text[i]
-            if (c.isLetterOrDigit()) {
-                indexMap.add(i)
-                content.append(c)
-            }
-        }
-        return StrippedText(content.toString(), indexMap)
-    }
-
-    private data class StrippedText(
-        val text: String,
-        /** strippedToOriginal[i] = index in original string where stripped char i came from */
-        val strippedToOriginal: List<Int>
-    )
 
     /** Reset tracking state */
     fun resetTranscriptionTracking() {

@@ -31,8 +31,9 @@ import java.util.concurrent.TimeUnit
  * - device code/token: `POST {CONSOLE_BASE}/auth/device/code|token` (JSON)
  * - token errors are `{error, error_description}` with the RFC 8628 values
  * - config: `GET {CONSOLE_BASE}/api/v2/config` (Bearer + x-org-id)
- * - models: `GET {INFERENCE_BASE}/v1/models` (Bearer + x-org-id), the
- *   models.dev v2 shape including `modalities` and per-protocol `api`
+ * - models: `GET {CONSOLE_BASE}/api/v1/models` (Bearer + x-org-id), the
+ *   caller's per-channel model catalogs in models.dev's v2 shape, keyed by
+ *   the provider ID the config gives each connection
  */
 object ConsoleApi {
 
@@ -168,7 +169,25 @@ object ConsoleApi {
         val providers: Map<String, ConsoleProvider> = emptyMap(),
     )
 
-    /** Entry of `GET {INFERENCE_BASE}/v1/models`: models.dev v2 with unknown keys kept out. */
+    /**
+     * One channel (connection) of `GET {CONSOLE_BASE}/api/v1/models`: the
+     * managed OpenCode connection, a Go subscription's, or one of the
+     * workspace's own (BYOK) connections. The map key is the provider ID the
+     * Console config gives the connection, and each model entry carries the
+     * base URL to call it on.
+     */
+    @Serializable
+    data class ChannelModels(
+        val id: String? = null,
+        val name: String? = null,
+        val models: Map<String, InferenceModel> = emptyMap(),
+    )
+
+    /**
+     * A model entry of [ChannelModels], models.dev v2 with unknown keys kept
+     * out. The `api` map's `base_url` is the channel's own Console URL for
+     * the protocol (the managed route or the connection's proxy).
+     */
     @Serializable
     data class InferenceModel(
         val id: String,
@@ -177,6 +196,7 @@ object ConsoleApi {
         val status: String? = null,
         val modalities: Modalities? = null,
         val api: Map<String, JsonObject>? = null,
+        val capabilities: Capabilities? = null,
     ) {
         @Serializable
         data class Modalities(
@@ -184,8 +204,58 @@ object ConsoleApi {
             val output: List<String>? = null,
         )
 
+        /**
+         * models.dev v2 capability flags. The inference gateway refuses a
+         * tools request only when `tools.supported` is explicitly false; a
+         * model with no published capabilities stays usable, so a catalog
+         * filter on tools must exclude only an explicit false.
+         */
+        @Serializable
+        data class Capabilities(
+            val tools: ToolSupport? = null,
+            val reasoning: ReasoningSupport? = null,
+        )
+
+        @Serializable
+        data class ToolSupport(
+            val supported: Boolean? = null,
+        )
+
+        /**
+         * models.dev v2's `capabilities.reasoning`: whether the model takes
+         * reasoning effort levels and which ones it publishes. `default` is
+         * the provider's own level, not a selectable one.
+         */
+        @Serializable
+        data class ReasoningSupport(
+            val supported: Boolean? = null,
+            val effort: List<String>? = null,
+        )
+
         fun supportsAudioInput(): Boolean =
             modalities?.input?.any { it.startsWith("audio") } == true
+
+        /**
+         * Whether the model takes tool declarations. Mirrors the gateway's
+         * own check: unknown capabilities keep the model, an explicit
+         * `supported: false` excludes it.
+         */
+        fun supportsTools(): Boolean = capabilities?.tools?.supported != false
+
+        /**
+         * The effort levels the model publishes, in published order: only
+         * when reasoning is explicitly supported, without `default`, which
+         * the empty selection already asks for. A model that only says it
+         * reasons publishes no selectable level, and none are invented.
+         */
+        fun effortLevels(): List<String> {
+            val reasoning = capabilities?.reasoning ?: return emptyList()
+            if (reasoning.supported != true) return emptyList()
+            return reasoning.effort.orEmpty()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && it != "default" }
+                .distinct()
+        }
 
         /**
          * The protocol this app can drive for the model: OpenAI-compatible
@@ -203,11 +273,6 @@ object ConsoleApi {
             api?.get(protocol)?.get("base_url")
                 ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
     }
-
-    @Serializable
-    private data class InferenceModelsResponse(
-        val data: List<InferenceModel> = emptyList(),
-    )
 
     // --- Errors ---
 
@@ -350,10 +415,15 @@ object ConsoleApi {
             }
         }
 
-    suspend fun fetchInferenceModels(accessToken: String, orgId: String?): List<InferenceModel> =
+    /**
+     * The caller's per-channel model catalogs, `GET {CONSOLE_BASE}/api/v1/models`.
+     * Any member can call it; a channel's disabled models are already left
+     * out, and each model entry names the base URL to call it on.
+     */
+    suspend fun fetchChannelModels(accessToken: String, orgId: String?): Map<String, ChannelModels> =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
-                .url("$INFERENCE_BASE/v1/models")
+                .url("$CONSOLE_BASE/api/v1/models")
                 .header("Authorization", "Bearer $accessToken")
                 .apply { orgId?.takeIf { it.isNotBlank() }?.let { header("x-org-id", it) } }
                 .build()
@@ -361,7 +431,7 @@ object ConsoleApi {
                 if (!response.isSuccessful) {
                     throw ConsoleHttpException(response.code, "Model list request failed")
                 }
-                json.decodeFromString<InferenceModelsResponse>(response.body.string()).data
+                json.decodeFromString<Map<String, ChannelModels>>(response.body.string())
             }
         }
 

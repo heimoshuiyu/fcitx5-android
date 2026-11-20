@@ -36,18 +36,40 @@ object TranscriptionHistoryManager : CoroutineScope by CoroutineScope(Supervisor
         }
     }
 
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Mirrors the HotwordAgentRun entity; defaults must match the
+            // @ColumnInfo(defaultValue = ...) declarations exactly.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `hotword_agent_run` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`createdAt` INTEGER NOT NULL, " +
+                    "`status` TEXT NOT NULL, " +
+                    "`attemptCount` INTEGER NOT NULL DEFAULT 0, " +
+                    "`originalText` TEXT NOT NULL, " +
+                    "`finalText` TEXT NOT NULL, " +
+                    "`eventsJson` TEXT NOT NULL DEFAULT '', " +
+                    "`submittedWords` TEXT NOT NULL DEFAULT '', " +
+                    "`error` TEXT NOT NULL DEFAULT '', " +
+                    "`modelId` TEXT NOT NULL DEFAULT '', " +
+                    "`durationMs` INTEGER NOT NULL DEFAULT 0)"
+            )
+        }
+    }
+
     fun init(context: Context) {
         db = Room
             .databaseBuilder(context, TranscriptionDatabase::class.java, "transcription_db")
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
         dao = db.transcriptionDao()
+        HotwordAgentManager.init(db)
         initialization = async {
             if (AppPrefs.getInstance().voiceInput.saveHistory.getValue()) {
                 prune()
             } else {
-                withContext(Dispatchers.IO) { db.clearAllTables() }
+                withContext(Dispatchers.IO) { dao.deleteAllRecords() }
             }
         }
         Timber.d("TranscriptionHistoryManager initialized")
@@ -85,7 +107,7 @@ object TranscriptionHistoryManager : CoroutineScope by CoroutineScope(Supervisor
 
     suspend fun deleteAll() {
         initialization.await()
-        withContext(Dispatchers.IO) { db.clearAllTables() }
+        withContext(Dispatchers.IO) { dao.deleteAllRecords() }
     }
 
     private suspend fun prune() {

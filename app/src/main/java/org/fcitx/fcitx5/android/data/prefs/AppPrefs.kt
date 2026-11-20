@@ -451,6 +451,11 @@ class AppPrefs(
         val consoleModelId = ManagedPreference.PString(sharedPreferences, "voice_input_console_model_id", "").apply { register() }
         val consoleVariantId = ManagedPreference.PString(sharedPreferences, "voice_input_console_variant_id", "").apply { register() }
 
+        // Hotword learning agent: same Console session and org, its own
+        // model/variant so a chat-only model can be selected for the agent.
+        val consoleAgentModelId = ManagedPreference.PString(sharedPreferences, "voice_input_console_agent_model_id", "").apply { register() }
+        val consoleAgentVariantId = ManagedPreference.PString(sharedPreferences, "voice_input_console_agent_variant_id", "").apply { register() }
+
         // Whisper backend
         val whisperUrl = editText(
             R.string.voice_input_whisper_url,

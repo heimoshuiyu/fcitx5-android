@@ -374,6 +374,37 @@
     <string name="voice_input_auto_hotwords_summary">Automatically add corrected words as hotwords when you edit transcribed text.</string>
     <string name="voice_input_auto_hotwords_list">Auto-learned hotwords</string>
     <string name="voice_input_auto_hotwords_list_summary">Words automatically learned from your corrections.</string>
+    <string name="hotword_agent_runs">Hotword learning records</string>
+    <string name="hotword_agent_runs_summary">Agent runs that learn hotwords from your corrections. Inputs and events are kept for 30 days, separate from transcription history.</string>
+    <string name="hotword_agent_runs_clear_title">Clear learning records</string>
+    <string name="hotword_agent_runs_clear_message">Delete all hotword learning records?</string>
+    <string name="hotword_agent_run_empty">No learning records yet</string>
+    <string name="hotword_agent_run_detail_title">Hotword learning run</string>
+    <string name="hotword_agent_run_not_found">Record not found or deleted</string>
+    <string name="hotword_agent_run_status_pending">Pending</string>
+    <string name="hotword_agent_run_status_running">Running</string>
+    <string name="hotword_agent_run_status_succeeded">Done</string>
+    <string name="hotword_agent_run_status_failed">Failed</string>
+    <string name="hotword_agent_run_preview">%1$s → %2$s</string>
+    <string name="hotword_agent_run_words_count">%1$d hotwords submitted</string>
+    <string name="hotword_agent_run_model">Model: %1$s</string>
+    <string name="hotword_agent_run_meta">Attempts: %1$d · Elapsed: %2$d ms</string>
+    <string name="hotword_agent_run_original">Original transcription</string>
+    <string name="hotword_agent_run_final">Final text</string>
+    <string name="hotword_agent_run_value_empty">(empty)</string>
+    <string name="hotword_agent_run_events">Agent log</string>
+    <string name="hotword_agent_run_events_none">No agent activity recorded</string>
+    <string name="hotword_agent_event_reasoning">Reasoning · step %1$d</string>
+    <string name="hotword_agent_event_text">Output · step %1$d</string>
+    <string name="hotword_agent_event_tool_call">Tool call · step %1$d</string>
+    <string name="hotword_agent_event_tool_result">Tool result · step %1$d</string>
+    <string name="hotword_agent_event_usage">Usage · step %1$d</string>
+    <string name="hotword_agent_event_finished">Finished · step %1$d</string>
+    <string name="hotword_agent_run_words">Submitted hotwords</string>
+    <string name="hotword_agent_run_words_none">No hotwords submitted</string>
+    <string name="hotword_agent_run_error">Error</string>
+    <string name="hotword_agent_run_action_run">Run</string>
+    <string name="hotword_agent_run_action_retry">Retry</string>
     <string name="voice_input_history">Transcription History</string>
     <string name="voice_input_history_summary">View locally stored transcription results and request metadata.</string>
     <string name="voice_setup_guidance_title">Finish voice input setup</string>
@@ -399,7 +430,9 @@
     <string name="transcription_raw_response">Raw response</string>
     <!-- OpenCode Console -->
     <string name="console_status_signed_in">OpenCode Console: Signed in</string>
-    <string name="console_status_signed_in_summary">Tap to sign out of OpenCode Console.</string>
+    <string name="console_status_signed_in_summary">Open the Console or sign out.</string>
+    <string name="console_open_console">Open Console</string>
+    <string name="console_open_console_failed">Could not open the Console page</string>
     <string name="console_status_signed_out">Sign in to OpenCode Console</string>
     <string name="console_status_signed_out_summary">Authorize hosted voice transcription with your OpenCode account.</string>
     <string name="console_sign_out">Sign out</string>
@@ -413,6 +446,7 @@
     <string name="console_device_denied">The authorization request was denied</string>
     <string name="console_device_failed">The sign-in request failed. Please try again.</string>
     <string name="console_model">Model</string>
+    <string name="console_model_selected">%1$s — %2$s</string>
     <string name="console_model_require_sign_in">Sign in to OpenCode Console first</string>
     <string name="console_model_none_summary">Choose a hosted model that supports audio input.</string>
     <string name="console_model_loading">Loading models…</string>
@@ -423,6 +457,14 @@
     <string name="console_variant_default">Default</string>
     <string name="console_session_expired">Session expired. Please sign in again.</string>
     <string name="console_variant_require_model">Select a model first</string>
+    <!-- Hotword learning agent (Console) -->
+    <string name="console_agent_model">Hotword learning model</string>
+    <string name="console_agent_variant">Hotword learning variant</string>
+    <string name="console_agent_model_require_sign_in">Sign in to OpenCode Console first</string>
+    <string name="console_agent_model_none_summary">Choose a chat model for hotword learning.</string>
+    <string name="console_agent_model_empty">No chat-capable models available for your account</string>
+    <string name="console_agent_model_error">Failed to load models. Tap to retry.</string>
+    <string name="console_agent_model_unavailable">The selected model is no longer available</string>
     <!-- Screen text context -->
     <string name="screen_text_context">Screen text context</string>
     <string name="screen_text_enabled">Screen text service: Enabled</string>

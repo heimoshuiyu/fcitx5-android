@@ -33,6 +33,8 @@ import org.fcitx.fcitx5.android.ui.main.settings.behavior.SymbolSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.VoiceInputSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.TranscriptionHistoryFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.TranscriptionDetailFragment
+import org.fcitx.fcitx5.android.ui.main.settings.behavior.HotwordAgentRunsFragment
+import org.fcitx.fcitx5.android.ui.main.settings.behavior.HotwordAgentRunDetailFragment
 import org.fcitx.fcitx5.android.ui.main.settings.global.GlobalConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodListFragment
@@ -91,6 +93,12 @@ sealed class SettingsRoute : Parcelable {
 
     @Serializable
     data class TranscriptionDetail(val recordId: Long) : SettingsRoute()
+
+    @Serializable
+    data object HotwordAgentRuns : SettingsRoute()
+
+    @Serializable
+    data class HotwordAgentRunDetail(val runId: Long) : SettingsRoute()
 
     @Serializable
     data object Plugin : SettingsRoute()
@@ -239,6 +247,12 @@ sealed class SettingsRoute : Parcelable {
             }
             fragment<TranscriptionDetailFragment, TranscriptionDetail> {
                 label = ctx.getString(R.string.transcription_detail_title)
+            }
+            fragment<HotwordAgentRunsFragment, HotwordAgentRuns> {
+                label = ctx.getString(R.string.hotword_agent_runs)
+            }
+            fragment<HotwordAgentRunDetailFragment, HotwordAgentRunDetail> {
+                label = ctx.getString(R.string.hotword_agent_run_detail_title)
             }
             fragment<PluginFragment, Plugin> {
                 label = ctx.getString(R.string.plugins)

@@ -373,6 +373,37 @@
     <string name="voice_input_auto_hotwords_summary">编辑转写文本时，自动将修正的词添加为热词。</string>
     <string name="voice_input_auto_hotwords_list">已学习的热词</string>
     <string name="voice_input_auto_hotwords_list_summary">根据您的修正自动学习的热词。</string>
+    <string name="hotword_agent_runs">热词学习记录</string>
+    <string name="hotword_agent_runs_summary">根据您的修正学习热词的 Agent 运行记录。输入文本与运行过程保存 30 天，独立于转录历史。</string>
+    <string name="hotword_agent_runs_clear_title">清空学习记录</string>
+    <string name="hotword_agent_runs_clear_message">确定删除全部热词学习记录吗？</string>
+    <string name="hotword_agent_run_empty">暂无学习记录</string>
+    <string name="hotword_agent_run_detail_title">热词学习详情</string>
+    <string name="hotword_agent_run_not_found">记录不存在或已删除</string>
+    <string name="hotword_agent_run_status_pending">等待运行</string>
+    <string name="hotword_agent_run_status_running">运行中</string>
+    <string name="hotword_agent_run_status_succeeded">已完成</string>
+    <string name="hotword_agent_run_status_failed">失败</string>
+    <string name="hotword_agent_run_preview">%1$s → %2$s</string>
+    <string name="hotword_agent_run_words_count">已提交 %1$d 个热词</string>
+    <string name="hotword_agent_run_model">模型：%1$s</string>
+    <string name="hotword_agent_run_meta">尝试次数：%1$d · 耗时：%2$d ms</string>
+    <string name="hotword_agent_run_original">原始转写</string>
+    <string name="hotword_agent_run_final">最终文本</string>
+    <string name="hotword_agent_run_value_empty">（空）</string>
+    <string name="hotword_agent_run_events">运行过程</string>
+    <string name="hotword_agent_run_events_none">没有记录到 Agent 活动</string>
+    <string name="hotword_agent_event_reasoning">思考 · 步骤 %1$d</string>
+    <string name="hotword_agent_event_text">输出 · 步骤 %1$d</string>
+    <string name="hotword_agent_event_tool_call">工具调用 · 步骤 %1$d</string>
+    <string name="hotword_agent_event_tool_result">工具结果 · 步骤 %1$d</string>
+    <string name="hotword_agent_event_usage">用量 · 步骤 %1$d</string>
+    <string name="hotword_agent_event_finished">结束 · 步骤 %1$d</string>
+    <string name="hotword_agent_run_words">已提交热词</string>
+    <string name="hotword_agent_run_words_none">未提交热词</string>
+    <string name="hotword_agent_run_error">错误</string>
+    <string name="hotword_agent_run_action_run">运行</string>
+    <string name="hotword_agent_run_action_retry">重试</string>
     <string name="voice_input_history">转录历史</string>
     <string name="voice_input_history_summary">查看保存在本机的转录结果和请求元数据。</string>
     <string name="voice_setup_guidance_title">完成语音输入设置</string>
@@ -406,7 +437,9 @@
     <string name="voice_input_screen_screenshot_summary">截取屏幕并发送给语音识别模型作为视觉上下文。需要启用屏幕文本无障碍服务。会增加流量消耗。</string>
     <!-- OpenCode Console -->
     <string name="console_status_signed_in">OpenCode Console：已登录</string>
-    <string name="console_status_signed_in_summary">点击退出 OpenCode Console。</string>
+    <string name="console_status_signed_in_summary">打开控制台或退出登录。</string>
+    <string name="console_open_console">打开控制台</string>
+    <string name="console_open_console_failed">无法打开控制台页面</string>
     <string name="console_status_signed_out">登录 OpenCode Console</string>
     <string name="console_status_signed_out_summary">使用 OpenCode 账号授权托管语音转写。</string>
     <string name="console_sign_out">退出登录</string>
@@ -420,6 +453,7 @@
     <string name="console_device_denied">授权请求被拒绝</string>
     <string name="console_device_failed">登录请求失败，请重试。</string>
     <string name="console_model">模型</string>
+    <string name="console_model_selected">%1$s — %2$s</string>
     <string name="console_model_require_sign_in">请先登录 OpenCode Console</string>
     <string name="console_model_none_summary">选择一个支持音频输入的托管模型。</string>
     <string name="console_model_loading">正在加载模型…</string>
@@ -430,4 +464,12 @@
     <string name="console_variant_default">默认</string>
     <string name="console_session_expired">会话已过期，请重新登录。</string>
     <string name="console_variant_require_model">请先选择模型</string>
+    <!-- Hotword learning agent (Console) -->
+    <string name="console_agent_model">热词学习模型</string>
+    <string name="console_agent_variant">热词学习变体</string>
+    <string name="console_agent_model_require_sign_in">请先登录 OpenCode Console</string>
+    <string name="console_agent_model_none_summary">选择用于热词学习的对话模型。</string>
+    <string name="console_agent_model_empty">当前账号没有可用的对话模型</string>
+    <string name="console_agent_model_error">模型加载失败，点击重试。</string>
+    <string name="console_agent_model_unavailable">所选模型已不可用</string>
 </resources>
