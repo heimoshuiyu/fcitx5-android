@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="hotword_agent_trace_accent">#355E95</color>
+    <color name="hotword_agent_trace_rail">#AABCD3</color>
+    <color name="hotword_agent_trace_payload">#EDF2F8</color>
+    <color name="hotword_agent_trace_error">#A12C38</color>
+</resources>
