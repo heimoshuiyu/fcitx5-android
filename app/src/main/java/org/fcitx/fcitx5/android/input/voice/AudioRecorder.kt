@@ -34,6 +34,8 @@ class AudioRecorder {
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         private const val BUFFER_FACTOR = 2
+        // 20 ms of audio: the level follows syllables whatever the device's read size.
+        private const val LEVEL_WINDOW_SAMPLES = SAMPLE_RATE / 50
         private const val MAX_RECORDING_SECONDS = 60
         private const val MAX_PCM_BYTES = SAMPLE_RATE * 2 * MAX_RECORDING_SECONDS
     }
@@ -79,7 +81,7 @@ class AudioRecorder {
                 isRecording = true
                 _isRecordingFlow.value = true
 
-                val readBuffer = ShortArray(bufferSize / 2)
+                val readBuffer = ShortArray(LEVEL_WINDOW_SAMPLES)
 
                 while (isActive && isRecording) {
                     val readCount = audioRecord?.read(readBuffer, 0, readBuffer.size)

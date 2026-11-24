@@ -39,8 +39,8 @@ class FloatingVoiceIndicator(
     var onCancelClicked: (() -> Unit)? = null
     var onCancelTranscriptionClicked: (() -> Unit)? = null
 
-    val waveformView = WaveformView(context).apply {
-        setBarColors(theme.altKeyTextColor, theme.accentKeyBackgroundColor)
+    val scopeView = DotScopeView(context, animated = !disableAnimation).apply {
+        setInk(theme.keyTextColor)
         setPadding(context.dp(4), 0, context.dp(4), 0)
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -83,7 +83,7 @@ class FloatingVoiceIndicator(
             ViewGroup.LayoutParams.MATCH_PARENT,
         )
         addView(recordingLabel)
-        addView(waveformView)
+        addView(scopeView)
         addView(releaseHint)
     }
 
@@ -184,13 +184,13 @@ class FloatingVoiceIndicator(
         state = State.RECORDING
         recordingContent.visibility = View.VISIBLE
         stateContent.visibility = View.GONE
-        waveformView.setRecording(true)
+        scopeView.setRecording(true)
         showPanel()
     }
 
     fun showTranscribing() {
         state = State.TRANSCRIBING
-        waveformView.setRecording(false)
+        scopeView.setRecording(false)
         recordingContent.visibility = View.GONE
         stateContent.visibility = View.VISIBLE
         progressBar.visibility = View.VISIBLE
@@ -202,7 +202,7 @@ class FloatingVoiceIndicator(
 
     fun showRetry(message: String? = null) {
         state = State.RETRY_AVAILABLE
-        waveformView.setRecording(false)
+        scopeView.setRecording(false)
         recordingContent.visibility = View.GONE
         stateContent.visibility = View.VISIBLE
         progressBar.visibility = View.GONE
@@ -215,7 +215,7 @@ class FloatingVoiceIndicator(
     fun hide() {
         if (state == State.HIDDEN) return
         state = State.HIDDEN
-        waveformView.setRecording(false)
+        scopeView.setRecording(false)
         view.animate().cancel()
         if (disableAnimation || !view.isAttachedToWindow) {
             view.visibility = View.GONE

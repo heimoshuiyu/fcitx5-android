@@ -268,12 +268,12 @@ class CommonKeyActionListener :
         when (val result = controller.startRecording()) {
             HoldToTalkController.StartResult.STARTED -> {
                 indicator.showRecording()
-                // Observe amplitude for waveform
+                // Observe amplitude for the dot scope
                 amplitudeJob?.cancel()
                 amplitudeJob = service.lifecycleScope.launch {
                     controller.amplitude.collect { amp ->
-                        indicator.waveformView.post {
-                            indicator.waveformView.setAmplitude(amp)
+                        indicator.scopeView.post {
+                            indicator.scopeView.setAmplitude(amp)
                         }
                     }
                 }
