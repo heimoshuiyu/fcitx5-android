@@ -70,7 +70,9 @@ private var signKeyTempFile: File? = null
 val Project.signKey: File?
     get() {
         signKeyFile?.let {
-            val file = File(it)
+            // A relative path is relative to the root project. Resolving it against the daemon's
+            // working directory (~/.gradle/daemon/<version>) makes validateSigning<Variant> fail.
+            val file = rootProject.file(it)
             if (file.exists()) return file
         }
         @OptIn(ExperimentalEncodingApi::class)
