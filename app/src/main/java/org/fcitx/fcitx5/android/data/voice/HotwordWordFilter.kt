@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
 /**
  * Pure validation and deduplication for words proposed by the hotword
  * learning agent. No Android dependencies so it can be unit-tested on the
- * JVM; the manager owns the actual list write.
+ * JVM; the store owns the actual list write.
  */
 object HotwordWordFilter {
 

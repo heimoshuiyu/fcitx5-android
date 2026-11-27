@@ -426,12 +426,11 @@ class AppPrefs(
             false,
             R.string.voice_input_auto_hotwords_summary
         )
-        val autoHotwordsList = editText(
-            R.string.voice_input_auto_hotwords_list,
+        val autoHotwordsList = ManagedPreference.PString(
+            sharedPreferences,
             "voice_input_auto_hotwords_list",
             "",
-            multiline = true
-        )
+        ).apply { register() }
 
         // OpenCode Console backend. Tokens are credentials, kept in secure storage;
         // the remaining values are internal, driven by pickers in the settings UI.
@@ -541,10 +540,6 @@ class AppPrefs(
                 it.summaryProvider = null
                 it.summary = ctx.getString(R.string.voice_input_hotwords_summary)
             }
-            generalCategory.findPreference<androidx.preference.Preference>("voice_input_auto_hotwords_list")?.let {
-                it.summaryProvider = null
-                it.summary = ctx.getString(R.string.voice_input_auto_hotwords_list_summary)
-            }
 
             // Whisper section
             addCategory(screen, R.string.voice_backend_whisper, listOf(
@@ -573,8 +568,19 @@ class AppPrefs(
             }
             screen.addPreference(category)
             keys.forEach { key ->
-                managedPreferencesUi.find { it.key == key }?.let { ui ->
-                    category.addPreference(ui.createUi(ctx))
+                if (key == "voice_input_auto_hotwords_list") {
+                    category.addPreference(androidx.preference.Preference(ctx).apply {
+                        this.key = key
+                        isPersistent = false
+                        isIconSpaceReserved = false
+                        isSingleLineTitle = false
+                        setTitle(R.string.voice_input_auto_hotwords_list)
+                        setSummary(R.string.voice_input_auto_hotwords_list_summary)
+                    })
+                } else {
+                    managedPreferencesUi.find { it.key == key }?.let { ui ->
+                        category.addPreference(ui.createUi(ctx))
+                    }
                 }
             }
             return category

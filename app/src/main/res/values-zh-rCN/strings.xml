@@ -373,6 +373,27 @@
     <string name="voice_input_auto_hotwords_summary">编辑转写文本时，自动将修正的词添加为热词。</string>
     <string name="voice_input_auto_hotwords_list">已学习的热词</string>
     <string name="voice_input_auto_hotwords_list_summary">根据您的修正自动学习的热词。</string>
+
+    <string name="auto_hotwords_search_hint">搜索已学习的热词</string>
+    <string name="auto_hotwords_empty">暂无已学习的热词</string>
+    <string name="auto_hotwords_no_results">没有匹配的已学习热词</string>
+    <string name="auto_hotwords_add_title">添加热词</string>
+    <string name="auto_hotwords_edit_title">编辑热词</string>
+    <string name="auto_hotword_input_hint">热词</string>
+    <string name="auto_hotwords_delete_selected">删除选中项</string>
+    <string name="auto_hotwords_delete_title">删除已学习的热词</string>
+    <plurals name="auto_hotwords_delete_message">
+        <item quantity="other">确定删除选中的 %1$d 个热词吗？</item>
+    </plurals>
+    <string name="auto_hotwords_clear">清空已学习的热词</string>
+    <string name="auto_hotwords_clear_message">确定清空全部 %1$d 个已学习的热词吗？不会删除热词学习记录。</string>
+    <string name="auto_hotword_error_empty">请输入热词。</string>
+    <string name="auto_hotword_error_too_short">热词至少需要 %1$d 个字符。</string>
+    <string name="auto_hotword_error_too_long">热词不能超过 %1$d 个字符。</string>
+    <string name="auto_hotword_error_duplicate">该热词已在已学习列表中。</string>
+    <string name="auto_hotword_error_duplicate_manual">该热词已在手动热词列表中。</string>
+    <string name="auto_hotword_error_full">已学习的热词最多保存 %1$d 个。</string>
+    <string name="auto_hotword_error_missing">该条目已不存在，请取消后重新打开编辑。</string>
     <string name="hotword_agent_runs">热词学习记录</string>
     <string name="hotword_agent_runs_summary">根据您的修正学习热词的 Agent 运行记录。输入文本与运行过程保存 30 天，独立于转录历史。</string>
     <string name="hotword_agent_runs_clear_title">清空学习记录</string>

@@ -374,6 +374,28 @@
     <string name="voice_input_auto_hotwords_summary">Automatically add corrected words as hotwords when you edit transcribed text.</string>
     <string name="voice_input_auto_hotwords_list">Auto-learned hotwords</string>
     <string name="voice_input_auto_hotwords_list_summary">Words automatically learned from your corrections.</string>
+
+    <string name="auto_hotwords_search_hint">Search learned hotwords</string>
+    <string name="auto_hotwords_empty">No learned hotwords yet</string>
+    <string name="auto_hotwords_no_results">No matching learned hotwords</string>
+    <string name="auto_hotwords_add_title">Add hotword</string>
+    <string name="auto_hotwords_edit_title">Edit hotword</string>
+    <string name="auto_hotword_input_hint">Hotword</string>
+    <string name="auto_hotwords_delete_selected">Delete selected</string>
+    <string name="auto_hotwords_delete_title">Delete learned hotwords</string>
+    <plurals name="auto_hotwords_delete_message">
+        <item quantity="one">Delete %1$d selected hotword?</item>
+        <item quantity="other">Delete %1$d selected hotwords?</item>
+    </plurals>
+    <string name="auto_hotwords_clear">Clear learned hotwords</string>
+    <string name="auto_hotwords_clear_message">Clear all learned hotwords (%1$d)? Hotword learning records will not be deleted.</string>
+    <string name="auto_hotword_error_empty">Enter a hotword.</string>
+    <string name="auto_hotword_error_too_short">Use at least %1$d characters.</string>
+    <string name="auto_hotword_error_too_long">Use no more than %1$d characters.</string>
+    <string name="auto_hotword_error_duplicate">This hotword is already in the learned list.</string>
+    <string name="auto_hotword_error_duplicate_manual">This hotword is already in the manual hotword list.</string>
+    <string name="auto_hotword_error_full">The learned hotword list can hold up to %1$d words.</string>
+    <string name="auto_hotword_error_missing">This entry no longer exists. Cancel and reopen the editor.</string>
     <string name="hotword_agent_runs">Hotword learning records</string>
     <string name="hotword_agent_runs_summary">Agent runs that learn hotwords from your corrections. Inputs and events are kept for 30 days, separate from transcription history.</string>
     <string name="hotword_agent_runs_clear_title">Clear learning records</string>

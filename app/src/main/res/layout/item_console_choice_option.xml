@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<org.fcitx.fcitx5.android.ui.main.settings.behavior.ConsoleChoiceOptionLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:baselineAligned="false"
+    android:clickable="true"
+    android:focusable="true"
+    android:importantForAccessibility="yes"
+    android:minHeight="56dp"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/console_choice_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:layout_weight="1"
+        android:importantForAccessibility="no"
+        android:singleLine="false"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="16sp" />
+
+    <RadioButton
+        android:id="@+id/console_choice_radio"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginStart="16dp"
+        android:buttonTint="?attr/colorControlActivated"
+        android:clickable="false"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:padding="0dp" />
+
+</org.fcitx.fcitx5.android.ui.main.settings.behavior.ConsoleChoiceOptionLayout>

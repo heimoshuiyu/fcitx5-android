@@ -8,8 +8,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -48,9 +46,6 @@ object HotwordAgentManager : CoroutineScope by CoroutineScope(SupervisorJob() + 
 
     private lateinit var dao: HotwordAgentDao
     private val initialized: Boolean get() = ::dao.isInitialized
-
-    /** Serializes read-modify-write cycles on the auto hotword list. */
-    private val applyMutex = Mutex()
 
     fun init(db: TranscriptionDatabase) {
         if (initialized) return
@@ -174,7 +169,7 @@ object HotwordAgentManager : CoroutineScope by CoroutineScope(SupervisorJob() + 
                 finalText = row.finalText,
                 existingHotwords = currentHotwords(prefs),
                 onEvent = { event -> events.add(toEventLog(event)) },
-                submitHotwords = { words -> submitHotwords(prefs, words, appliedWords) },
+                submitHotwords = { words -> submitHotwords(words, appliedWords) },
             )
         } catch (e: CancellationException) {
             Timber.d("$TAG: run id=$id cancelled; leaving status=running")
@@ -202,26 +197,15 @@ object HotwordAgentManager : CoroutineScope by CoroutineScope(SupervisorJob() + 
      * Returns the decision as JSON so the agent can see what landed.
      */
     private suspend fun submitHotwords(
-        prefs: AppPrefs.VoiceInput,
         candidates: List<String>,
         appliedWords: MutableList<String>,
-    ): String = applyMutex.withLock {
-        val manualWords = prefs.hotwords.getValue()
-            .lines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        val autoLines = prefs.autoHotwordsList.getValue()
-            .lines().map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
-        val result = HotwordWordFilter.filter(
-            candidates = candidates,
-            manualWords = manualWords,
-            existingAutoWords = autoLines.toSet(),
-        )
+    ): String {
+        val result = AutoHotwordStore.shared.applyAgentCandidates(candidates)
         if (result.added.isNotEmpty()) {
-            autoLines.addAll(result.added)
-            prefs.autoHotwordsList.setValue(autoLines.joinToString("\n"))
             appliedWords.addAll(result.added)
             Timber.d("$TAG: agent added hotwords ${result.added}")
         }
-        json.encodeToString(result)
+        return json.encodeToString(result)
     }
 
     /**

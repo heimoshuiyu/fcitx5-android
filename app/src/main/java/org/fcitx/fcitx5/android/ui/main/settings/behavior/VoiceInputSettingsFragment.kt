@@ -8,17 +8,8 @@ package org.fcitx.fcitx5.android.ui.main.settings.behavior
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import android.util.TypedValue
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.BaseAdapter
-import android.widget.CheckedTextView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
-import androidx.core.widget.TextViewCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.ListPreference
@@ -47,6 +38,8 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
     private var deviceFlowJob: Job? = null
     private var deviceDialog: AlertDialog? = null
+    private var choiceDialog: AlertDialog? = null
+    private var choiceDialogGeneration = 0
     private var catalogJob: Job? = null
     private var catalog: List<ConsoleCatalog.ModelEntry>? = null
     private var catalogLoadError: String? = null
@@ -58,6 +51,12 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
 
     override fun onPreferenceUiCreated(screen: PreferenceScreen) {
         val context = screen.context
+
+        screen.findPreference<Preference>("voice_input_auto_hotwords_list")
+            ?.setOnPreferenceClickListener {
+                findNavController().navigateWithAnim(SettingsRoute.AutoHotwords)
+                true
+            }
 
         // Setup guidance shown on top while the Console backend has no
         // usable configuration yet (same condition as the IME's pre-check).
@@ -481,86 +480,35 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         }
     }
 
-    /**
-     * One row of the model picker: a channel's group header ([isHeader]) or a
-     * selectable model ([entry] null on header rows).
-     */
-    private data class PickerRow(
-        val header: String? = null,
-        val entry: ConsoleCatalog.ModelEntry? = null,
+    private fun showManagedChoiceDialog(
+        title: Int,
+        rows: List<ConsoleChoiceRow>,
+        selectedId: String?,
+        onPicked: (String) -> Unit,
     ) {
-        val isHeader: Boolean get() = header != null
+        val generation = ++choiceDialogGeneration
+        choiceDialog?.dismiss()
+        val dialog = showConsoleChoiceDialog(requireContext(), title, rows, selectedId) { id ->
+            if (generation == choiceDialogGeneration) onPicked(id)
+        }
+        choiceDialog = dialog
+        dialog.setOnDismissListener {
+            if (choiceDialog === dialog) choiceDialog = null
+        }
     }
 
     private fun showModelPicker(entries: List<ConsoleCatalog.ModelEntry>, selected: String) {
-        // A header before each channel's models, in the order buildEntries
-        // produced; the entries themselves carry the channel label.
-        val rows = buildList {
-            var header: String? = null
-            entries.forEach { entry ->
-                if (entry.channelName != header) {
-                    add(PickerRow(header = entry.channelName))
-                    header = entry.channelName
-                }
-                add(PickerRow(entry = entry))
-            }
-        }
+        val rows = consoleChoiceRows(
+            entries.map { ConsoleChoiceEntry(it.id, it.displayName, it.channelName) },
+        )
         val selectedId = ConsoleCatalog.findById(entries, selected)?.id
-        val checked = rows.indexOfFirst { it.entry?.id == selectedId }
-        var picked = -1
-        val adapter = object : BaseAdapter() {
-            override fun getCount() = rows.size
-            override fun getItem(position: Int) = rows[position]
-            override fun getItemId(position: Int) = position.toLong()
-            override fun areAllItemsEnabled() = false
-            override fun isEnabled(position: Int) = !rows[position].isHeader
-            override fun getItemViewType(position: Int) = if (rows[position].isHeader) 0 else 1
-            override fun getViewTypeCount() = 2
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val row = rows[position]
-                if (row.isHeader) {
-                    val view = convertView as? TextView
-                        ?: LayoutInflater.from(parent.context)
-                            .inflate(android.R.layout.simple_list_item_1, parent, false) as TextView
-                    view.text = row.header
-                    TextViewCompat.setTextAppearance(
-                        view,
-                        android.R.style.TextAppearance_DeviceDefault_Small,
-                    )
-                    val typedValue = TypedValue()
-                    view.context.theme.resolveAttribute(android.R.attr.textColorSecondary, typedValue, true)
-                    // A theme attribute may resolve to a color resource or a
-                    // literal; pass the resolved color, never the resource id.
-                    if (typedValue.resourceId != 0) {
-                        view.setTextColor(ContextCompat.getColor(view.context, typedValue.resourceId))
-                    } else {
-                        view.setTextColor(typedValue.data)
-                    }
-                    return view
-                }
-                val view = convertView as? CheckedTextView
-                    ?: LayoutInflater.from(parent.context)
-                        .inflate(android.R.layout.simple_list_item_single_choice, parent, false) as CheckedTextView
-                view.text = row.entry?.displayName
-                return view
-            }
+        showManagedChoiceDialog(R.string.console_model, rows, selectedId) { id ->
+            val entry = entries.first { it.id == id }
+            prefs.consoleModelId.setValue(entry.id)
+            // A new model resets the variant to its default.
+            prefs.consoleVariantId.setValue("")
+            updateConsoleEntries()
         }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.console_model)
-            .setSingleChoiceItems(adapter, checked) { _, which ->
-                picked = which
-            }
-            .setPositiveButton(android.R.string.ok) { dialog, _ ->
-                rows.getOrNull(picked)?.entry?.let { entry ->
-                    prefs.consoleModelId.setValue(entry.id)
-                    // A new model resets the variant to its default.
-                    prefs.consoleVariantId.setValue("")
-                    updateConsoleEntries()
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
     }
 
     private fun updateVariantPref(pref: Preference) {
@@ -593,25 +541,17 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
     private fun showVariantPicker(entry: ConsoleCatalog.ModelEntry, selected: String) {
         val context = requireContext()
         val ids = listOf("") + entry.variants
-        val labels = ids.map {
-            if (it.isBlank()) context.getString(R.string.console_variant_default) else it
-        }.toTypedArray()
-        val checked = ids.indexOf(selected).coerceAtLeast(0)
-        var picked = -1
-        AlertDialog.Builder(context)
-            .setTitle(R.string.console_variant)
-            .setSingleChoiceItems(labels, checked) { _, which ->
-                picked = which
-            }
-            .setPositiveButton(android.R.string.ok) { dialog, _ ->
-                if (picked >= 0) {
-                    prefs.consoleVariantId.setValue(ids[picked])
-                    updateConsoleEntries()
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        val rows = consoleChoiceRows(ids.map {
+            ConsoleChoiceEntry(
+                it,
+                if (it.isBlank()) context.getString(R.string.console_variant_default) else it,
+            )
+        })
+        val selectedId = selected.takeIf(ids::contains) ?: ""
+        showManagedChoiceDialog(R.string.console_variant, rows, selectedId) { id ->
+            prefs.consoleVariantId.setValue(id)
+            updateConsoleEntries()
+        }
     }
 
     // --- Hotword learning agent: model + variant ---
@@ -717,76 +657,22 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         }
     }
 
-    /** Mirrors [showModelPicker] for the Agent-kind catalog. */
     private fun showAgentModelPicker(entries: List<ConsoleCatalog.ModelEntry>, selected: String) {
-        // A header before each channel's models, in the order buildEntries
-        // produced; the entries themselves carry the channel label.
-        val rows = buildList {
-            var header: String? = null
-            entries.forEach { entry ->
-                if (entry.channelName != header) {
-                    add(PickerRow(header = entry.channelName))
-                    header = entry.channelName
-                }
-                add(PickerRow(entry = entry))
-            }
-        }
+        val rows = consoleChoiceRows(
+            entries.map { ConsoleChoiceEntry(it.id, it.displayName, it.channelName) },
+        )
         val selectedId = ConsoleCatalog.findById(entries, selected)?.id
-        val checked = rows.indexOfFirst { it.entry?.id == selectedId }
-        var picked = -1
-        val adapter = object : BaseAdapter() {
-            override fun getCount() = rows.size
-            override fun getItem(position: Int) = rows[position]
-            override fun getItemId(position: Int) = position.toLong()
-            override fun areAllItemsEnabled() = false
-            override fun isEnabled(position: Int) = !rows[position].isHeader
-            override fun getItemViewType(position: Int) = if (rows[position].isHeader) 0 else 1
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val row = rows[position]
-                if (row.isHeader) {
-                    val view = convertView as? TextView
-                        ?: LayoutInflater.from(parent.context)
-                            .inflate(android.R.layout.simple_list_item_1, parent, false) as TextView
-                    view.text = row.header
-                    TextViewCompat.setTextAppearance(
-                        view,
-                        android.R.style.TextAppearance_DeviceDefault_Small,
-                    )
-                    val typedValue = TypedValue()
-                    view.context.theme.resolveAttribute(android.R.attr.textColorSecondary, typedValue, true)
-                    // A theme attribute may resolve to a color resource or a
-                    // literal; pass the resolved color, never the resource id.
-                    if (typedValue.resourceId != 0) {
-                        view.setTextColor(ContextCompat.getColor(view.context, typedValue.resourceId))
-                    } else {
-                        view.setTextColor(typedValue.data)
-                    }
-                    return view
-                }
-                val view = convertView as? CheckedTextView
-                    ?: LayoutInflater.from(parent.context)
-                        .inflate(android.R.layout.simple_list_item_single_choice, parent, false) as CheckedTextView
-                view.text = row.entry?.displayName
-                return view
-            }
+        showManagedChoiceDialog(
+            R.string.console_agent_model,
+            rows,
+            selectedId,
+        ) { id ->
+            val entry = entries.first { it.id == id }
+            prefs.consoleAgentModelId.setValue(entry.id)
+            // A new model resets the variant to its default.
+            prefs.consoleAgentVariantId.setValue("")
+            updateConsoleEntries()
         }
-
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.console_agent_model)
-            .setSingleChoiceItems(adapter, checked) { _, which ->
-                picked = which
-            }
-            .setPositiveButton(android.R.string.ok) { dialog, _ ->
-                rows.getOrNull(picked)?.entry?.let { entry ->
-                    prefs.consoleAgentModelId.setValue(entry.id)
-                    // A new model resets the variant to its default.
-                    prefs.consoleAgentVariantId.setValue("")
-                    updateConsoleEntries()
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
     }
 
     private fun updateAgentVariantPref(pref: Preference) {
@@ -816,29 +702,20 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
         }
     }
 
-    /** Mirrors [showVariantPicker] for the agent model/variant prefs. */
     private fun showAgentVariantPicker(entry: ConsoleCatalog.ModelEntry, selected: String) {
         val context = requireContext()
         val ids = listOf("") + entry.variants
-        val labels = ids.map {
-            if (it.isBlank()) context.getString(R.string.console_variant_default) else it
-        }.toTypedArray()
-        val checked = ids.indexOf(selected).coerceAtLeast(0)
-        var picked = -1
-        AlertDialog.Builder(context)
-            .setTitle(R.string.console_agent_variant)
-            .setSingleChoiceItems(labels, checked) { _, which ->
-                picked = which
-            }
-            .setPositiveButton(android.R.string.ok) { dialog, _ ->
-                if (picked >= 0) {
-                    prefs.consoleAgentVariantId.setValue(ids[picked])
-                    updateConsoleEntries()
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        val rows = consoleChoiceRows(ids.map {
+            ConsoleChoiceEntry(
+                it,
+                if (it.isBlank()) context.getString(R.string.console_variant_default) else it,
+            )
+        })
+        val selectedId = selected.takeIf(ids::contains) ?: ""
+        showManagedChoiceDialog(R.string.console_agent_variant, rows, selectedId) { id ->
+            prefs.consoleAgentVariantId.setValue(id)
+            updateConsoleEntries()
+        }
     }
 
     // --- Screen text accessibility status ---
@@ -871,6 +748,9 @@ class VoiceInputSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstanc
     }
 
     override fun onDestroyView() {
+        choiceDialogGeneration++
+        choiceDialog?.dismiss()
+        choiceDialog = null
         // The device-flow poll lives in the view's lifecycle scope; its dialog
         // belongs to the activity window and must be dismissed by hand.
         dismissDeviceDialog()
